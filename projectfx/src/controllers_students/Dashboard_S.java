@@ -1,4 +1,4 @@
-package controllers;
+package controllers_students;
 
 import java.net.URL;
 import javafx.animation.TranslateTransition;

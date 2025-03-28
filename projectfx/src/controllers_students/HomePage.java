@@ -1,4 +1,4 @@
-package controllers;
+package controllers_students;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

@@ -1,4 +1,4 @@
-package controllers;
+package controllers_students;
 
 public class Question {
     private String text;

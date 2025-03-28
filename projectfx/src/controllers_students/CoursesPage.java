@@ -1,4 +1,4 @@
-package controllers;
+package controllers_students;
 
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;

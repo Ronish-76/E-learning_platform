@@ -1,4 +1,4 @@
-package controllers;  // Make sure this is in the same package as your Login class
+package controllers_students;  // Make sure this is in the same package as your Login class
 
 public class User {
     private int userID;

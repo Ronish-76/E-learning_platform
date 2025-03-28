@@ -1,4 +1,4 @@
-package controllers;
+package controllers_students;
 
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
