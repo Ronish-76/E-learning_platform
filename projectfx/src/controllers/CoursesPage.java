@@ -1,4 +1,4 @@
-package application;
+package controllers;
 
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;

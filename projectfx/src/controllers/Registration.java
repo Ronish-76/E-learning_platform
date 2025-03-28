@@ -1,4 +1,4 @@
-package application;
+package controllers;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;

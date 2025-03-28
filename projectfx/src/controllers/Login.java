@@ -1,4 +1,4 @@
-package application;
+package controllers;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -17,6 +17,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+
+import dao.DatabaseConnection;
 
 public class Login extends Application {
     

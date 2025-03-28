@@ -1,4 +1,4 @@
-package application;
+package controllers;
 
 import java.net.URL;
 import javafx.animation.TranslateTransition;

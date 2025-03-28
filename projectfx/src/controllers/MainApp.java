@@ -1,4 +1,4 @@
-package application;
+package controllers;
 
 public class MainApp {
 
