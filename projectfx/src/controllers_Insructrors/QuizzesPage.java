@@ -71,10 +71,8 @@ public class QuizzesPage {
         item.setSpacing(15);
         item.getStyleClass().add("quiz-item");
         
-        // Status indicator
-        Rectangle statusIndicator = new Rectangle(8, 0);
-        statusIndicator.heightProperty().bind(item.heightProperty());
-        
+        // Status indicator - using fixed height instead of binding
+        Rectangle statusIndicator = new Rectangle(8, 80);  // Fixed height of 80px
         if (status.equals("Active")) {
             statusIndicator.getStyleClass().add("active-indicator");
         } else if (status.equals("Completed")) {
