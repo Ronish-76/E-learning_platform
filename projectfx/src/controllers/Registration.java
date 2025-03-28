@@ -29,7 +29,7 @@ public class Registration extends Application {
         Label title = new Label("Create an account");
         title.setFont(Font.font("Inter", FontWeight.BOLD, 28));
 
-        Label subtitle = new Label("Start your 30-day free trial now!");
+        Label subtitle = new Label("   ");
         subtitle.setFont(Font.font("Inter", FontWeight.NORMAL, 14));
         subtitle.setTextFill(Color.GRAY);
 

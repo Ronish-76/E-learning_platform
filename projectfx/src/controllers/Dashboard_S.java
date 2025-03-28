@@ -58,7 +58,8 @@ public class Dashboard_S extends Application {
         Scene scene = new Scene(root, 1280, 800);
 
         // Load CSS file
-        URL cssUrl = getClass().getResource("/style.css"); 
+        URL cssUrl = getClass().getResource("/styles/style.css");
+
         if (cssUrl != null) {
             scene.getStylesheets().add(cssUrl.toExternalForm());
         } else {
