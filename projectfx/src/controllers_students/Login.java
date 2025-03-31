@@ -18,6 +18,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import controllers_Admin.AdminDashboard;
+import controllers_Insructrors.InstructorDashboard;
 import dao.DatabaseConnection;
 
 public class Login extends Application {
@@ -158,13 +160,40 @@ public class Login extends Application {
     }
 
     private void launchDashboard() {
-        // You might want to pass the loggedInUser to the Dashboard
-        Dashboard_S dashboard = new Dashboard_S();
         Stage dashboardStage = new Stage();
+        
         try {
-            // Potentially modify this to pass the user information
-            dashboard.start(dashboardStage);
+            // Check user role and launch the corresponding dashboard
+            String userRole = loggedInUser.getRole();
+            
+            switch(userRole) {
+                case "Student":
+                    // Launch Student Dashboard
+                    Dashboard_S studentDashboard = new Dashboard_S();
+                    studentDashboard.start(dashboardStage);
+                    break;
+                    
+                case "Instructor":
+                    // Launch Instructor Dashboard
+                    InstructorDashboard instructorDashboard = new InstructorDashboard();
+                    instructorDashboard.start(dashboardStage);
+                    break;
+                    
+                case "Admin":
+                    // Launch Admin Dashboard
+                    AdminDashboard adminDashboard = new AdminDashboard();
+                    adminDashboard.start(dashboardStage);
+                    break;
+                    
+                default:
+                    // If role is not recognized, show error and reopen login
+                    showAlert(Alert.AlertType.ERROR, "Unknown Role", 
+                            "User role '" + userRole + "' is not recognized.");
+                    new Login().start(new Stage());
+            }
         } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Error", 
+                    "Failed to open dashboard: " + e.getMessage());
             e.printStackTrace();
         }
     }

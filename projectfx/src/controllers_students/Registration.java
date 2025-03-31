@@ -13,11 +13,18 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+import dao.DatabaseConnection;
+
 public class Registration extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        VBox leftPanel = new VBox(5); // Reduced spacing between elements
+        VBox leftPanel = new VBox(5);
         leftPanel.setPadding(new Insets(40));
         leftPanel.setAlignment(Pos.CENTER_LEFT);
         leftPanel.setStyle("-fx-background-color: #ffffff;");
@@ -33,7 +40,7 @@ public class Registration extends Application {
         subtitle.setFont(Font.font("Inter", FontWeight.NORMAL, 14));
         subtitle.setTextFill(Color.GRAY);
 
-        VBox formContainer = new VBox(10); // Grouped form fields together
+        VBox formContainer = new VBox(10);
         
         Label usernameLabel = new Label("Username");
         TextField usernameField = new TextField();
@@ -59,7 +66,8 @@ public class Registration extends Application {
         createAccountButton.setStyle("-fx-background-color: #000000; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         createAccountButton.setMinHeight(40);
         createAccountButton.setMinWidth(300);
-        createAccountButton.setOnAction(e -> validateForm(usernameField, emailField, passwordField, confirmPasswordField));
+        createAccountButton.setOnAction(e -> registerUser(usernameField.getText(), emailField.getText(), 
+                                                         passwordField.getText(), confirmPasswordField.getText()));
 
         Label loginLink = new Label("Already have an account? Log in");
         loginLink.setTextFill(Color.BLUE);
@@ -92,24 +100,100 @@ public class Registration extends Application {
         primaryStage.setWidth(1100);
         primaryStage.setHeight(700);
         primaryStage.centerOnScreen();
-        primaryStage.setResizable(false); // Disable resizing and remove the fullscreen button
+        primaryStage.setResizable(false);
         primaryStage.setTitle("E-Learning Platform");
         primaryStage.show();
     }
 
-    private void validateForm(TextField username, TextField email, PasswordField password, PasswordField confirmPassword) {
+    private void registerUser(String username, String email, String password, String confirmPassword) {
+        // Validate input
         String emailPattern = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$";
-        if (username.getText().trim().isEmpty() || email.getText().trim().isEmpty() ||
-            password.getText().trim().isEmpty() || confirmPassword.getText().trim().isEmpty()) {
+        if (username.trim().isEmpty() || email.trim().isEmpty() ||
+            password.trim().isEmpty() || confirmPassword.trim().isEmpty()) {
             showAlert(Alert.AlertType.ERROR, "Missing Information", "Please fill in all fields to proceed.");
-        } else if (!email.getText().matches(emailPattern)) {
+            return;
+        } else if (!email.matches(emailPattern)) {
             showAlert(Alert.AlertType.ERROR, "Invalid Email", "Please enter a valid email address.");
-        } else if (password.getText().length() < 6) {
+            return;
+        } else if (password.length() < 6) {
             showAlert(Alert.AlertType.ERROR, "Weak Password", "Password must be at least 6 characters long.");
-        } else if (!password.getText().equals(confirmPassword.getText())) {
+            return;
+        } else if (!password.equals(confirmPassword)) {
             showAlert(Alert.AlertType.ERROR, "Password Mismatch", "Passwords do not match. Please try again.");
-        } else {
-            showAlert(Alert.AlertType.INFORMATION, "Success", "Your account has been created successfully!");
+            return;
+        }
+
+        // If all validation passes, insert user into database
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        
+        try {
+            // Get database connection
+            conn = DatabaseConnection.getConnection();
+            
+            // Check if username or email already exists
+            String checkQuery = "SELECT COUNT(*) FROM Users WHERE username = ? OR email = ?";
+            pstmt = conn.prepareStatement(checkQuery);
+            pstmt.setString(1, username);
+            pstmt.setString(2, email);
+            rs = pstmt.executeQuery();
+            
+            if (rs.next() && rs.getInt(1) > 0) {
+                showAlert(Alert.AlertType.ERROR, "Registration Failed", 
+                         "Username or email already exists. Please use different credentials.");
+                return;
+            }
+            
+            // Close resources from first query
+            if (rs != null) rs.close();
+            if (pstmt != null) pstmt.close();
+            
+            // Insert user into Users table
+            String insertUserSQL = "INSERT INTO Users (username, email, passwordHash, role) VALUES (?, ?, ?, ?)";
+            pstmt = conn.prepareStatement(insertUserSQL, java.sql.Statement.RETURN_GENERATED_KEYS);
+            pstmt.setString(1, username);
+            pstmt.setString(2, email);
+            pstmt.setString(3, password); // Store password directly for now (we'll hash it later)
+            pstmt.setString(4, "Student");
+            
+            int rowsAffected = pstmt.executeUpdate();
+            
+            if (rowsAffected > 0) {
+                // Get the generated user ID
+                rs = pstmt.getGeneratedKeys();
+                if (rs.next()) {
+                    int userId = rs.getInt(1);
+                    
+                    // Close resources
+                    if (rs != null) rs.close();
+                    if (pstmt != null) pstmt.close();
+                    
+                    // Insert into Students table
+                    String insertStudentSQL = "INSERT INTO Students (studentID, userID) VALUES (?, ?)";
+                    pstmt = conn.prepareStatement(insertStudentSQL);
+                    pstmt.setInt(1, userId);
+                    pstmt.setInt(2, userId);
+                    pstmt.executeUpdate();
+                    
+                    showAlert(Alert.AlertType.INFORMATION, "Success", "Registration successful! You can now log in.");
+                }
+            } else {
+                showAlert(Alert.AlertType.ERROR, "Registration Failed", "Failed to create user account.");
+            }
+            
+        } catch (SQLException e) {
+            showAlert(Alert.AlertType.ERROR, "Database Error", "Error: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            // Close all resources
+            try {
+                if (rs != null) rs.close();
+                if (pstmt != null) pstmt.close();
+                if (conn != null) conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
     }
 

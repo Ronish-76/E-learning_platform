@@ -8,597 +8,968 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.scene.paint.Color;
-import javafx.scene.image.ImageView;
-import javafx.scene.image.Image;
+import javafx.scene.text.TextAlignment;
+import javafx.util.Callback;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import javafx.scene.control.Alert.AlertType;
+import dao.DatabaseConnection;
 
+/**
+ * Displays student assignments with a modern user interface
+ * connected to a database for real data
+ */
 public class AssignmentsPage {
     private final Map<String, SubjectData> subjectDataMap = new HashMap<>();
     private final StringProperty currentSubject = new SimpleStringProperty();
     private final VBox dynamicContent = new VBox(20);
     
+    // User information
+    private User currentUser;
+    private int currentUserId = 0;
+    private int studentId = 0;
+    
+    /**
+     * Creates a new AssignmentsPage instance
+     */
     public AssignmentsPage() {
-        initializeSubjectData();
+        // Try to get logged-in user from Login class
+        this.currentUser = Login.getLoggedInUser();
+        if (currentUser != null) {
+            this.currentUserId = currentUser.getUserID();
+            try {
+                this.studentId = getStudentId(currentUserId);
+            } catch (SQLException e) {
+                showError("Database Error", "Error retrieving student ID: " + e.getMessage());
+            }
+        }
+        
+        loadSubjectsAndAssignments();
         currentSubject.addListener((observable, oldValue, newValue) -> updateContent(newValue));
     }
-
-    private void initializeSubjectData() {
-        // Initialize with sample data
-        ObservableList<Assignment> scienceAssignments = FXCollections.observableArrayList(
-            new Assignment("Ecosystem Diversity Worksheet", LocalDate.now().plusDays(1), "Not started", "25", "High"),
-            new Assignment("Lab Report: Water Quality", LocalDate.now().plusDays(3), "In progress", "50", "Medium"),
-            new Assignment("Environmental Impact Study", LocalDate.now().plusDays(7), "Not started", "100", "High")
-        );
+    
+    /**
+     * Creates a new AssignmentsPage instance with specified user ID
+     */
+    public AssignmentsPage(int userId) {
+        this.currentUserId = userId;
+        // If Login.getLoggedInUser() is available, prefer that
+        User loggedInUser = Login.getLoggedInUser();
+        if (loggedInUser != null) {
+            this.currentUser = loggedInUser;
+            this.currentUserId = loggedInUser.getUserID();
+        }
         
-        ObservableList<Assignment> mathAssignments = FXCollections.observableArrayList(
-            new Assignment("Quadratic Equations Practice", LocalDate.now().plusDays(2), "Not started", "20", "Medium"),
-            new Assignment("Statistics Project", LocalDate.now().plusDays(5), "Not started", "75", "High"),
-            new Assignment("Calculus Quiz", LocalDate.now(), "Due today", "30", "High")
-        );
+        try {
+            this.studentId = getStudentId(currentUserId);
+        } catch (SQLException e) {
+            showError("Database Error", "Error retrieving student ID: " + e.getMessage());
+        }
         
-        ObservableList<Assignment> historyAssignments = FXCollections.observableArrayList(
-            new Assignment("Ancient Civilizations Essay", LocalDate.now().plusDays(4), "Not started", "60", "Medium"),
-            new Assignment("Historical Figure Presentation", LocalDate.now().plusDays(10), "Not started", "100", "High")
-        );
-        
-        subjectDataMap.put("Science 2", new SubjectData("Science 2", "Period 1", "k6ertd", "#388E3C", scienceAssignments));
-        subjectDataMap.put("Math 3", new SubjectData("Math 3", "Period 2", "m7athx", "#1976D2", mathAssignments));
-        subjectDataMap.put("History", new SubjectData("History", "Period 3", "h8isty", "#D32F2F", historyAssignments));
+        loadSubjectsAndAssignments();
+        currentSubject.addListener((observable, oldValue, newValue) -> updateContent(newValue));
     }
-
+    
+    /**
+     * Loads subjects and assignments from the database
+     */
+    private void loadSubjectsAndAssignments() {
+        subjectDataMap.clear();
+        
+        if (studentId <= 0) {
+            showError("Authentication Error", "Please log in to view your assignments");
+            return;
+        }
+        
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            // First get all subjects (courses) the student is enrolled in
+            String subjectQuery = 
+                "SELECT c.courseID, c.courseName, c.courseColor, " +
+                "CONCAT('Period ', e.periodNumber) as period " +
+                "FROM Courses c " +
+                "JOIN Enrollments e ON c.courseID = e.courseID " +
+                "WHERE e.studentID = ? " +
+                "ORDER BY e.periodNumber";
+            
+            try (PreparedStatement pstmt = conn.prepareStatement(subjectQuery)) {
+                pstmt.setInt(1, studentId);
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    boolean hasSubjects = false;
+                    
+                    while (rs.next()) {
+                        hasSubjects = true;
+                        int courseId = rs.getInt("courseID");
+                        String courseName = rs.getString("courseName");
+                        String period = rs.getString("period");
+                        String color = rs.getString("courseColor");
+                        
+                        // If color is null, assign a default color
+                        if (color == null || color.isEmpty()) {
+                            color = getDefaultColor(courseName);
+                        }
+                        
+                        // Load assignments for this course
+                        ObservableList<Assignment> assignments = loadAssignmentsForCourse(courseId);
+                        
+                        // Add to the subject map
+                        subjectDataMap.put(courseName, new SubjectData(courseName, period, color, assignments));
+                    }
+                    
+                    // Set initial subject if we have any
+                    if (hasSubjects && !subjectDataMap.isEmpty()) {
+                        currentSubject.set(subjectDataMap.keySet().iterator().next());
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            showError("Database Error", "Error loading subjects: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Loads assignments for a specific course
+     */
+    private ObservableList<Assignment> loadAssignmentsForCourse(int courseId) {
+        ObservableList<Assignment> assignments = FXCollections.observableArrayList();
+        
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String query = 
+                "SELECT a.assignmentID, a.title, a.dueDate, ap.status, " +
+                "a.points, a.priority, a.description " +
+                "FROM Assignments a " +
+                "LEFT JOIN AssignmentProgress ap ON a.assignmentID = ap.assignmentID AND ap.studentID = ? " +
+                "WHERE a.courseID = ? " +
+                "ORDER BY a.dueDate";
+            
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, studentId);
+                pstmt.setInt(2, courseId);
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        int assignmentId = rs.getInt("assignmentID");
+                        String title = rs.getString("title");
+                        LocalDate dueDate = rs.getDate("dueDate").toLocalDate();
+                        
+                        // Get status - if null, set as "Not started"
+                        String status = rs.getString("status");
+                        if (status == null || status.isEmpty()) {
+                            status = "Not started";
+                        }
+                        
+                        String points = rs.getString("points");
+                        String priority = rs.getString("priority");
+                        String description = rs.getString("description");
+                        
+                        Assignment assignment = new Assignment(assignmentId, title, dueDate, status, points, priority, description);
+                        assignments.add(assignment);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            showError("Database Error", "Error loading assignments: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
+        return assignments;
+    }
+    
+    /**
+     * Get student ID from user ID
+     */
+    private int getStudentId(int userId) throws SQLException {
+        if (userId <= 0) {
+            return 0;
+        }
+        
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String query = "SELECT studentID FROM Students WHERE userID = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, userId);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getInt("studentID");
+                    } else {
+                        return 0; // No student record found
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Returns a default color based on subject name
+     */
+    private String getDefaultColor(String subjectName) {
+        // Convert to lowercase for case-insensitive comparison
+        String lowerName = subjectName.toLowerCase();
+        
+        if (lowerName.contains("math") || lowerName.contains("calculus") || lowerName.contains("algebra")) {
+            return "#3498DB"; // Blue
+        } else if (lowerName.contains("science") || lowerName.contains("biology") || 
+                   lowerName.contains("chemistry") || lowerName.contains("physics")) {
+            return "#2ECC71"; // Green
+        } else if (lowerName.contains("history") || lowerName.contains("social")) {
+            return "#E74C3C"; // Red
+        } else if (lowerName.contains("english") || lowerName.contains("literature") || 
+                   lowerName.contains("language")) {
+            return "#9B59B6"; // Purple
+        } else if (lowerName.contains("art") || lowerName.contains("music") || 
+                   lowerName.contains("drama")) {
+            return "#F39C12"; // Orange
+        } else {
+            return "#34495E"; // Dark blue/gray
+        }
+    }
+    
+    /**
+     * Returns the main view for the assignment page
+     */
     public Node getView() {
-        return getAssignmentsPage();
-    }
-
-    private BorderPane getAssignmentsPage() {
         BorderPane mainLayout = new BorderPane();
-        mainLayout.setTop(createNavBar());
+        mainLayout.setBackground(new Background(new BackgroundFill(Color.web("#f5f7fa"), CornerRadii.EMPTY, Insets.EMPTY)));
         
-        dynamicContent.setPadding(new Insets(10));
-        dynamicContent.setBackground(new Background(new BackgroundFill(Color.WHITE, CornerRadii.EMPTY, Insets.EMPTY)));
+        // Create the title bar
+        BorderPane titleBar = createTitleBar();
+        mainLayout.setTop(titleBar);
         
+        // Create the content area with padding
+        dynamicContent.setPadding(new Insets(20));
+        dynamicContent.setSpacing(20);
+        
+        // Add the scroll pane for the content
         ScrollPane scrollPane = new ScrollPane(dynamicContent);
         scrollPane.setFitToWidth(true);
-        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scrollPane.setBackground(new Background(new BackgroundFill(Color.web("#f5f7fa"), CornerRadii.EMPTY, Insets.EMPTY)));
+        scrollPane.setPannable(true);
+        
+        // Add a drop shadow to the content
+        DropShadow dropShadow = new DropShadow();
+        dropShadow.setColor(Color.rgb(0, 0, 0, 0.2));
+        dropShadow.setRadius(5);
+        dropShadow.setOffsetX(0);
+        dropShadow.setOffsetY(2);
+        dynamicContent.setEffect(dropShadow);
         
         mainLayout.setCenter(scrollPane);
         
-        // Initialize with default subject
-        currentSubject.set("Science ");
+        // Initialize with default subject if available
+        if (!subjectDataMap.isEmpty() && currentSubject.get() != null) {
+            updateContent(currentSubject.get());
+        } else {
+            // Show a message if no subjects or assignments
+            showNoSubjectsMessage();
+        }
         
         return mainLayout;
     }
     
-    private HBox createNavBar() {
-        HBox navBar = new HBox(10);
-        navBar.setPadding(new Insets(10));
-        navBar.setStyle("-fx-background-color: #F5F5F5;");
-        navBar.setAlignment(Pos.CENTER_LEFT);
+    /**
+     * Shows a message when no subjects are available
+     */
+    private void showNoSubjectsMessage() {
+        dynamicContent.getChildren().clear();
         
-        Label subjectLabel = new Label("Subject:");
-        subjectLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        VBox messageBox = new VBox(15);
+        messageBox.setAlignment(Pos.CENTER);
+        messageBox.setPadding(new Insets(50));
+        messageBox.setBackground(new Background(new BackgroundFill(Color.WHITE, new CornerRadii(10), Insets.EMPTY)));
         
-        ComboBox<String> subjectSelector = new ComboBox<>();
-        subjectSelector.getItems().addAll(subjectDataMap.keySet());
-        subjectSelector.setValue("Science 2");
-        subjectSelector.valueProperty().bindBidirectional(currentSubject);
+        Label noSubjectsLabel = new Label("No courses found");
+        noSubjectsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 20));
+        noSubjectsLabel.setTextFill(Color.web("#2c3e50"));
         
-        Button refreshButton = new Button("Refresh");
-        refreshButton.setOnAction(e -> updateContent(currentSubject.get()));
+        Label suggestLabel = new Label("You are not enrolled in any courses yet. Please enroll in courses to see assignments.");
+        suggestLabel.setFont(Font.font("Arial", 14));
+        suggestLabel.setTextFill(Color.web("#7f8c8d"));
+        suggestLabel.setWrapText(true);
         
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Button enrollButton = new Button("Browse Available Courses");
+        enrollButton.setStyle(
+            "-fx-background-color: #3498db; " +
+            "-fx-text-fill: white; " +
+            "-fx-font-weight: bold; " +
+            "-fx-padding: 10 20; " +
+            "-fx-background-radius: 5;"
+        );
         
-        TextField searchField = new TextField();
-        searchField.setPromptText("Search assignments...");
-        searchField.setPrefWidth(200);
+        // Here you'd add action to navigate to the courses page
+        enrollButton.setOnAction(e -> {
+            // Navigate to courses page
+        });
         
-        Button searchButton = new Button("Search");
-        searchButton.setOnAction(e -> searchAssignments(searchField.getText()));
-        
-        navBar.getChildren().addAll(subjectLabel, subjectSelector, refreshButton, spacer, searchField, searchButton);
-        
-        return navBar;
+        messageBox.getChildren().addAll(noSubjectsLabel, suggestLabel, enrollButton);
+        dynamicContent.getChildren().add(messageBox);
     }
     
+    /**
+     * Creates the top title bar
+     */
+    private BorderPane createTitleBar() {
+        BorderPane titleBar = new BorderPane();
+        titleBar.setPadding(new Insets(15, 20, 15, 20));
+        titleBar.setBackground(new Background(new BackgroundFill(Color.WHITE, CornerRadii.EMPTY, Insets.EMPTY)));
+        
+        // Add drop shadow to title bar
+        DropShadow dropShadow = new DropShadow();
+        dropShadow.setColor(Color.rgb(0, 0, 0, 0.1));
+        dropShadow.setRadius(3);
+        dropShadow.setOffsetX(0);
+        dropShadow.setOffsetY(1);
+        titleBar.setEffect(dropShadow);
+        
+        // Left side - Title
+        Label titleLabel = new Label("My Assignments");
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 22));
+        titleLabel.setTextFill(Color.web("#2c3e50"));
+        
+        titleBar.setLeft(titleLabel);
+        
+        // Only show subject selector if we have subjects
+        if (!subjectDataMap.isEmpty()) {
+            // Right side - Subject selector
+            HBox subjectSelectorBox = new HBox(10);
+            subjectSelectorBox.setAlignment(Pos.CENTER_RIGHT);
+            
+            Label subjectLabel = new Label("Subject:");
+            subjectLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+            subjectLabel.setTextFill(Color.web("#7f8c8d"));
+            
+            ComboBox<String> subjectSelector = new ComboBox<>();
+            subjectSelector.getItems().addAll(subjectDataMap.keySet());
+            
+            if (currentSubject.get() != null) {
+                subjectSelector.setValue(currentSubject.get());
+            } else if (!subjectDataMap.isEmpty()) {
+                subjectSelector.setValue(subjectDataMap.keySet().iterator().next());
+            }
+            
+            subjectSelector.valueProperty().bindBidirectional(currentSubject);
+            
+            // Customize the combo box
+            subjectSelector.setButtonCell(new SubjectListCell());
+            subjectSelector.setCellFactory(p -> new SubjectListCell());
+            
+            subjectSelectorBox.getChildren().addAll(subjectLabel, subjectSelector);
+            titleBar.setRight(subjectSelectorBox);
+        }
+        
+        return titleBar;
+    }
+    
+    /**
+     * Updates the content based on the selected subject
+     */
     private void updateContent(String subject) {
         dynamicContent.getChildren().clear();
         
         SubjectData data = subjectDataMap.get(subject);
         if (data != null) {
-            VBox topSection = createTopSection(data);
-            VBox statisticsSection = createStatisticsSection(data);
-            VBox upcomingSection = createUpcomingSection(data);
-            VBox postSection = createPostSection(data);
+            VBox subjectHeaderSection = createSubjectHeaderSection(data);
+            VBox summarySection = createSummarySection(data);
+            VBox assignmentsSection = createAssignmentsSection(data);
             
-            dynamicContent.getChildren().addAll(topSection, statisticsSection, upcomingSection, postSection);
+            dynamicContent.getChildren().addAll(subjectHeaderSection, summarySection, assignmentsSection);
+        } else {
+            showNoSubjectsMessage();
         }
     }
-
-    private VBox createTopSection(SubjectData data) {
-        VBox topSection = new VBox(10);
-        topSection.setPadding(new Insets(15));
-        topSection.setBackground(new Background(new BackgroundFill(Color.web(data.getColor()), CornerRadii.EMPTY, Insets.EMPTY)));
-
+    
+    /**
+     * Creates the subject header section with name and period
+     */
+    private VBox createSubjectHeaderSection(SubjectData data) {
+        VBox headerSection = new VBox(10);
+        headerSection.setPadding(new Insets(25));
+        headerSection.setBackground(new Background(new BackgroundFill(Color.web(data.getColor()), new CornerRadii(10), Insets.EMPTY)));
+        
+        // Subject icon
+        Circle subjectIcon = new Circle(40);
+        subjectIcon.setFill(Color.WHITE);
+        subjectIcon.setOpacity(0.2);
+        
+        // First letter of subject
+        Label iconLetter = new Label(data.getSubjectName().substring(0, 1));
+        iconLetter.setFont(Font.font("Arial", FontWeight.BOLD, 40));
+        iconLetter.setTextFill(Color.WHITE);
+        
+        StackPane iconStack = new StackPane(subjectIcon, iconLetter);
+        
+        // Subject name and period
         Label subjectLabel = new Label(data.getSubjectName());
-        subjectLabel.setFont(Font.font("Arial", FontWeight.BOLD, 28));
+        subjectLabel.setFont(Font.font("Arial", FontWeight.BOLD, 32));
         subjectLabel.setTextFill(Color.WHITE);
-
+        
         Label periodLabel = new Label(data.getPeriod());
-        periodLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        periodLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 18));
         periodLabel.setTextFill(Color.WHITE);
-
-        HBox codeBox = new HBox(20);
-        codeBox.setAlignment(Pos.CENTER_LEFT);
+        periodLabel.setOpacity(0.9);
         
-        Label classCodeLabel = new Label("Class code: " + data.getClassCode());
-        classCodeLabel.setTextFill(Color.WHITE);
+        VBox textBox = new VBox(5, subjectLabel, periodLabel);
         
-        Button copyCodeButton = new Button("Copy");
-        copyCodeButton.setOnAction(e -> {
-            // Simulate copying to clipboard
-            System.out.println("Copied class code: " + data.getClassCode());
-        });
+        HBox contentBox = new HBox(20);
+        contentBox.setAlignment(Pos.CENTER_LEFT);
+        contentBox.getChildren().addAll(iconStack, textBox);
         
-        codeBox.getChildren().addAll(classCodeLabel, copyCodeButton);
-
-        HBox meetBox = new HBox(20);
-        meetBox.setAlignment(Pos.CENTER_LEFT);
+        headerSection.getChildren().add(contentBox);
         
-        Button generateMeetButton = new Button("Generate Meet code");
-        generateMeetButton.setOnAction(e -> {
-            // Simulate generating a meet code
-            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-            alert.setTitle("Meet Code Generated");
-            alert.setHeaderText(null);
-            alert.setContentText("Meet code generated: " + data.getClassCode() + "-meet");
-            alert.showAndWait();
-        });
-        
-        meetBox.getChildren().add(generateMeetButton);
-
-        VBox infoBox = new VBox(5, subjectLabel, periodLabel, codeBox, meetBox);
-        infoBox.setAlignment(Pos.CENTER_LEFT);
-
-        topSection.getChildren().add(infoBox);
-        return topSection;
+        return headerSection;
     }
     
-    private VBox createStatisticsSection(SubjectData data) {
-        VBox statsSection = new VBox(10);
-        statsSection.setPadding(new Insets(10));
-        statsSection.setStyle("-fx-background-color: #F8F9FA; -fx-background-radius: 10;");
+    /**
+     * Creates a summary section showing counts of assignments
+     */
+    private VBox createSummarySection(SubjectData data) {
+        VBox summarySection = new VBox(15);
+        summarySection.setPadding(new Insets(20));
+        summarySection.setBackground(new Background(new BackgroundFill(Color.WHITE, new CornerRadii(10), Insets.EMPTY)));
         
-        Label statsLabel = new Label("Class Statistics");
-        statsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        Label summaryLabel = new Label("Assignment Summary");
+        summaryLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        summaryLabel.setTextFill(Color.web("#2c3e50"));
         
-        HBox statsCards = new HBox(15);
-        statsCards.setAlignment(Pos.CENTER);
+        // Calculate stats
+        int total = data.getAssignments().size();
+        int notStarted = 0;
+        int inProgress = 0;
+        int completed = 0;
         
-        VBox assignmentsCard = createStatsCard("Total Assignments", String.valueOf(data.getAssignments().size()), "#4CAF50");
-        
-        int dueToday = 0;
-        int overdue = 0;
         for (Assignment assignment : data.getAssignments()) {
-            if (assignment.getDueDate().equals(LocalDate.now())) {
-                dueToday++;
-            } else if (assignment.getDueDate().isBefore(LocalDate.now())) {
-                overdue++;
+            switch (assignment.getStatus().toLowerCase()) {
+                case "not started":
+                    notStarted++;
+                    break;
+                case "in progress":
+                    inProgress++;
+                    break;
+                case "completed":
+                    completed++;
+                    break;
             }
         }
         
-        VBox dueTodayCard = createStatsCard("Due Today", String.valueOf(dueToday), "#2196F3");
-        VBox overdueCard = createStatsCard("Overdue", String.valueOf(overdue), "#F44336");
+        // Create stat tiles
+        HBox statTiles = new HBox(15);
+        statTiles.setAlignment(Pos.CENTER);
         
-        statsCards.getChildren().addAll(assignmentsCard, dueTodayCard, overdueCard);
+        VBox totalTile = createStatTile("Total", String.valueOf(total), "#3498db");
+        VBox notStartedTile = createStatTile("Not Started", String.valueOf(notStarted), "#e74c3c");
+        VBox inProgressTile = createStatTile("In Progress", String.valueOf(inProgress), "#f39c12");
+        VBox completedTile = createStatTile("Completed", String.valueOf(completed), "#2ecc71");
         
-        statsSection.getChildren().addAll(statsLabel, statsCards);
-        return statsSection;
+        statTiles.getChildren().addAll(totalTile, notStartedTile, inProgressTile, completedTile);
+        
+        summarySection.getChildren().addAll(summaryLabel, statTiles);
+        return summarySection;
     }
     
-    private VBox createStatsCard(String title, String value, String color) {
-        VBox card = new VBox(5);
-        card.setPadding(new Insets(15));
-        card.setAlignment(Pos.CENTER);
-        card.setStyle("-fx-background-color: white; -fx-background-radius: 5; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 2);");
-        card.setPrefWidth(150);
+    /**
+     * Creates a stat tile for the summary section
+     */
+    private VBox createStatTile(String label, String value, String color) {
+        VBox tile = new VBox(5);
+        tile.setPadding(new Insets(15));
+        tile.setAlignment(Pos.CENTER);
+        tile.setPrefWidth(150);
+        tile.setBackground(new Background(new BackgroundFill(Color.web(color).deriveColor(1, 1, 1, 0.1), new CornerRadii(5), Insets.EMPTY)));
         
         Label valueLabel = new Label(value);
         valueLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
         valueLabel.setTextFill(Color.web(color));
         
-        Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 14));
+        Label descLabel = new Label(label);
+        descLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 14));
+        descLabel.setTextFill(Color.web("#7f8c8d"));
         
-        card.getChildren().addAll(valueLabel, titleLabel);
-        return card;
+        tile.getChildren().addAll(valueLabel, descLabel);
+        return tile;
     }
-
-    private VBox createUpcomingSection(SubjectData data) {
-        VBox upcomingSection = new VBox(10);
-        upcomingSection.setPadding(new Insets(10));
-
-        HBox header = new HBox();
-        header.setAlignment(Pos.CENTER_LEFT);
+    
+    /**
+     * Creates the assignments table section
+     */
+    private VBox createAssignmentsSection(SubjectData data) {
+        VBox assignmentsSection = new VBox(15);
+        assignmentsSection.setPadding(new Insets(20));
+        assignmentsSection.setBackground(new Background(new BackgroundFill(Color.WHITE, new CornerRadii(10), Insets.EMPTY)));
         
-        Label upcomingLabel = new Label("Upcoming Assignments");
-        upcomingLabel.setFont(Font.font("Arial", FontWeight.BOLD, 20));
+        HBox headerBox = new HBox();
+        headerBox.setAlignment(Pos.CENTER_LEFT);
+        
+        Label assignmentsLabel = new Label("Assignments");
+        assignmentsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        assignmentsLabel.setTextFill(Color.web("#2c3e50"));
+        
+        Button addButton = new Button("+ Add Assignment");
+        addButton.setFont(Font.font("Arial", 12));
+        addButton.setOnAction(e -> addNewAssignment(data.getSubjectName()));
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        ComboBox<String> sortOptions = new ComboBox<>();
-        sortOptions.getItems().addAll("Due Date (Ascending)", "Due Date (Descending)", "Priority");
-        sortOptions.setValue("Due Date (Ascending)");
-        sortOptions.setOnAction(e -> sortAssignments(sortOptions.getValue(), data));
+        headerBox.getChildren().addAll(assignmentsLabel, spacer, addButton);
         
-        header.getChildren().addAll(upcomingLabel, spacer, new Label("Sort by:"), sortOptions);
-
+        // Create assignments table with improved styling
+        TableView<Assignment> assignmentsTable = createStyledTable(data);
+        
+        assignmentsSection.getChildren().addAll(headerBox, assignmentsTable);
+        return assignmentsSection;
+    }
+    
+    /**
+     * Adds a new assignment to the course
+     */
+    private void addNewAssignment(String subjectName) {
+        // In a real application, you would show a form and add to database
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Add Assignment");
+        alert.setHeaderText("Add New Assignment");
+        alert.setContentText("This would open a form to add a new assignment to " + subjectName);
+        alert.showAndWait();
+    }
+    
+    /**
+     * Creates a styled table view for assignments
+     */
+    private TableView<Assignment> createStyledTable(SubjectData data) {
         TableView<Assignment> assignmentsTable = new TableView<>(data.getAssignments());
         assignmentsTable.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
-        assignmentsTable.setPrefHeight(200);
-
+        assignmentsTable.setPrefHeight(300);
+        assignmentsTable.setPlaceholder(new Label("No assignments for this subject"));
+        
+        // Name column
         TableColumn<Assignment, String> assignmentColumn = new TableColumn<>("Assignment");
         assignmentColumn.setCellValueFactory(cellData -> cellData.getValue().assignmentNameProperty());
-        assignmentColumn.setMinWidth(200);
-
+        assignmentColumn.setPrefWidth(250);
+        
+        // Due date column
         TableColumn<Assignment, String> dueDateColumn = new TableColumn<>("Due Date");
         dueDateColumn.setCellValueFactory(cellData -> cellData.getValue().formattedDueDateProperty());
-        dueDateColumn.setMinWidth(100);
+        dueDateColumn.setPrefWidth(120);
+        dueDateColumn.setCellFactory(column -> new TableCell<Assignment, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                    setStyle("");
+                } else {
+                    setText(item);
+                    if (item.contains("Today")) {
+                        setTextFill(Color.web("#e74c3c"));
+                        setStyle("-fx-font-weight: bold;");
+                    } else if (item.contains("Tomorrow")) {
+                        setTextFill(Color.web("#f39c12"));
+                        setStyle("-fx-font-weight: bold;");
+                    } else if (item.contains("Overdue")) {
+                        setTextFill(Color.web("#c0392b"));
+                        setStyle("-fx-font-weight: bold;");
+                    } else {
+                        setTextFill(Color.BLACK);
+                        setStyle("");
+                    }
+                }
+            }
+        });
         
+        // Status column with color indicators
         TableColumn<Assignment, String> statusColumn = new TableColumn<>("Status");
         statusColumn.setCellValueFactory(cellData -> cellData.getValue().statusProperty());
-        statusColumn.setMinWidth(100);
+        statusColumn.setPrefWidth(120);
+        statusColumn.setCellFactory(column -> new TableCell<Assignment, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    HBox statusBox = new HBox(5);
+                    statusBox.setAlignment(Pos.CENTER_LEFT);
+                    
+                    Circle statusIndicator = new Circle(5);
+                    if (item.equalsIgnoreCase("Not started")) {
+                        statusIndicator.setFill(Color.web("#e74c3c"));
+                    } else if (item.equalsIgnoreCase("In progress")) {
+                        statusIndicator.setFill(Color.web("#f39c12"));
+                    } else if (item.equalsIgnoreCase("Completed")) {
+                        statusIndicator.setFill(Color.web("#2ecc71"));
+                    } else {
+                        statusIndicator.setFill(Color.web("#95a5a6"));
+                    }
+                    
+                    Label statusLabel = new Label(item);
+                    statusBox.getChildren().addAll(statusIndicator, statusLabel);
+                    setGraphic(statusBox);
+                }
+            }
+        });
         
+        // Points column
         TableColumn<Assignment, String> pointsColumn = new TableColumn<>("Points");
         pointsColumn.setCellValueFactory(cellData -> cellData.getValue().pointsProperty());
-        pointsColumn.setMinWidth(70);
+        pointsColumn.setPrefWidth(70);
         
+        // Priority column with colors
         TableColumn<Assignment, String> priorityColumn = new TableColumn<>("Priority");
         priorityColumn.setCellValueFactory(cellData -> cellData.getValue().priorityProperty());
-        priorityColumn.setMinWidth(80);
+        priorityColumn.setPrefWidth(80);
+        priorityColumn.setCellFactory(column -> new TableCell<Assignment, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    setText(item);
+                    if (item.equalsIgnoreCase("High")) {
+                        setTextFill(Color.web("#e74c3c"));
+                        setStyle("-fx-font-weight: bold;");
+                    } else if (item.equalsIgnoreCase("Medium")) {
+                        setTextFill(Color.web("#f39c12"));
+                    } else {
+                        setTextFill(Color.web("#2ecc71"));
+                    }
+                }
+            }
+        });
         
+        // Actions column with buttons
         TableColumn<Assignment, Void> actionsColumn = new TableColumn<>("Actions");
-        actionsColumn.setMinWidth(150);
+        actionsColumn.setPrefWidth(150);
         actionsColumn.setCellFactory(param -> new TableCell<>() {
+            private final HBox buttonsBox = new HBox(5);
             private final Button viewButton = new Button("View");
-            private final Button submitButton = new Button("Submit");
+            private final Button editButton = new Button("Edit");
             
             {
-                HBox buttonBox = new HBox(5, viewButton, submitButton);
-                
                 viewButton.setOnAction(event -> {
                     Assignment assignment = getTableView().getItems().get(getIndex());
                     viewAssignment(assignment);
                 });
                 
-                submitButton.setOnAction(event -> {
+                editButton.setOnAction(event -> {
                     Assignment assignment = getTableView().getItems().get(getIndex());
-                    submitAssignment(assignment);
+                    editAssignment(assignment);
                 });
                 
-                setGraphic(buttonBox);
+                // Style the buttons
+                viewButton.setPrefWidth(60);
+                editButton.setPrefWidth(60);
+                buttonsBox.getChildren().addAll(viewButton, editButton);
+                buttonsBox.setAlignment(Pos.CENTER);
             }
             
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                setGraphic(empty ? null : getGraphic());
+                setGraphic(empty ? null : buttonsBox);
             }
         });
-
-        assignmentsTable.getColumns().addAll(assignmentColumn, dueDateColumn, statusColumn, pointsColumn, priorityColumn, actionsColumn);
-
-        HBox buttonBar = new HBox(10);
-        buttonBar.setAlignment(Pos.CENTER_RIGHT);
         
-        Button viewAllButton = new Button("View All");
-        viewAllButton.setOnAction(e -> viewAllAssignments(data));
+        assignmentsTable.getColumns().addAll(
+            assignmentColumn, 
+            dueDateColumn, 
+            statusColumn, 
+            pointsColumn, 
+            priorityColumn, 
+            actionsColumn
+        );
         
-        Button addAssignmentButton = new Button("Add Assignment");
-        addAssignmentButton.setOnAction(e -> addNewAssignment(data));
-        
-        buttonBar.getChildren().addAll(viewAllButton, addAssignmentButton);
-
-        upcomingSection.getChildren().addAll(header, assignmentsTable, buttonBar);
-        return upcomingSection;
-    }
-
-    private VBox createPostSection(SubjectData data) {
-        VBox postSection = new VBox(10);
-        postSection.setPadding(new Insets(15));
-        postSection.setStyle("-fx-background-color: #F5F5F5; -fx-background-radius: 10;");
-
-        Label sectionTitle = new Label("Class Materials");
-        sectionTitle.setFont(Font.font("Arial", FontWeight.BOLD, 18));
-        
-        VBox materialCard = new VBox(10);
-        materialCard.setPadding(new Insets(15));
-        materialCard.setStyle("-fx-background-color: white; -fx-background-radius: 5; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 2);");
-        
-        Label postLabel = new Label("Watch this video about ecosystem diversity.");
-        postLabel.setWrapText(true);
-        postLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 14));
-
-        HBox videoBox = new HBox(10);
-        videoBox.setAlignment(Pos.CENTER_LEFT);
-        
-        // Placeholder for video thumbnail
-        Region videoThumbnail = new Region();
-        videoThumbnail.setPrefSize(120, 70);
-        videoThumbnail.setStyle("-fx-background-color: #DDD;");
-        
-        VBox videoInfo = new VBox(5);
-        Label videoLabel = new Label("The World's Oceans Ecosystem");
-        videoLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
-        videoLabel.setTextFill(Color.BLUE);
-        
-        Label videoDetails = new Label("YouTube - 3:56 minutes");
-        videoDetails.setFont(Font.font("Arial", FontWeight.NORMAL, 12));
-        
-        videoInfo.getChildren().addAll(videoLabel, videoDetails);
-        videoBox.getChildren().addAll(videoThumbnail, videoInfo);
-        
-        HBox buttonBar = new HBox(10);
-        buttonBar.setAlignment(Pos.CENTER_RIGHT);
-        
-        Button watchButton = new Button("Watch Video");
-        watchButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white;");
-        watchButton.setOnAction(e -> watchVideo());
-        
-        Button downloadButton = new Button("Download Resources");
-        downloadButton.setOnAction(e -> downloadResources());
-        
-        buttonBar.getChildren().addAll(downloadButton, watchButton);
-        
-        materialCard.getChildren().addAll(postLabel, videoBox, buttonBar);
-        
-        Button addMaterialButton = new Button("Add Class Material");
-        addMaterialButton.setOnAction(e -> addClassMaterial());
-        
-        postSection.getChildren().addAll(sectionTitle, materialCard, addMaterialButton);
-        return postSection;
+        return assignmentsTable;
     }
     
-    // Helper methods for the added functionality
-    private void sortAssignments(String sortMethod, SubjectData data) {
-        // Implementation of sorting logic
-        switch (sortMethod) {
-            case "Due Date (Ascending)":
-                data.getAssignments().sort((a1, a2) -> a1.getDueDate().compareTo(a2.getDueDate()));
-                break;
-            case "Due Date (Descending)":
-                data.getAssignments().sort((a1, a2) -> a2.getDueDate().compareTo(a1.getDueDate()));
-                break;
-            case "Priority":
-                data.getAssignments().sort((a1, a2) -> {
-                    // Sort by priority: High, Medium, Low
-                    int p1 = getPriorityValue(a1.getPriority());
-                    int p2 = getPriorityValue(a2.getPriority());
-                    return Integer.compare(p1, p2);
-                });
-                break;
-        }
-    }
-    
-    private int getPriorityValue(String priority) {
-        switch (priority) {
-            case "High": return 1;
-            case "Medium": return 2;
-            case "Low": return 3;
-            default: return 4;
-        }
-    }
-    
+    /**
+     * Shows assignment details in a styled dialog
+     */
     private void viewAssignment(Assignment assignment) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Assignment Details");
-        alert.setHeaderText(assignment.getAssignmentName());
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Assignment Details");
+        dialog.setHeaderText(null);
         
-        VBox content = new VBox(10);
-        content.setPadding(new Insets(10));
+        // Create a custom header
+        VBox header = new VBox(10);
+        header.setPadding(new Insets(20));
+        header.setBackground(new Background(new BackgroundFill(Color.web("#3498db"), CornerRadii.EMPTY, Insets.EMPTY)));
         
-        Label dueDateLabel = new Label("Due Date: " + assignment.getFormattedDueDate());
-        Label statusLabel = new Label("Status: " + assignment.getStatus());
-        Label pointsLabel = new Label("Points: " + assignment.getPoints());
-        Label priorityLabel = new Label("Priority: " + assignment.getPriority());
-        Label descriptionLabel = new Label("Description: This is a sample description for the assignment. It contains details about what students need to do to complete the assignment.");
-        descriptionLabel.setWrapText(true);
+        Label titleLabel = new Label(assignment.getAssignmentName());
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 22));
+        titleLabel.setTextFill(Color.WHITE);
+        titleLabel.setWrapText(true);
         
-        content.getChildren().addAll(dueDateLabel, statusLabel, pointsLabel, priorityLabel, descriptionLabel);
+        header.getChildren().add(titleLabel);
         
-        alert.getDialogPane().setContent(content);
-        alert.showAndWait();
-    }
-    
-    private void submitAssignment(Assignment assignment) {
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Submit Assignment");
-        alert.setHeaderText("Submit " + assignment.getAssignmentName());
-        alert.setContentText("Are you sure you want to submit this assignment?");
-        
-        ButtonType submitButton = new ButtonType("Submit");
-        ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
-        
-        alert.getButtonTypes().setAll(submitButton, cancelButton);
-        
-        alert.showAndWait().ifPresent(buttonType -> {
-            if (buttonType == submitButton) {
-                // Simulate submission
-                assignment.setStatus("Submitted");
-                // Update the UI
-                updateContent(currentSubject.get());
-            }
-        });
-    }
-    
-    private void viewAllAssignments(SubjectData data) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("All Assignments");
-        alert.setHeaderText(data.getSubjectName() + " - All Assignments");
-        
-        VBox content = new VBox(10);
-        content.setPadding(new Insets(10));
-        
-        for (Assignment assignment : data.getAssignments()) {
-            Label assignmentLabel = new Label(assignment.getAssignmentName() + " - " + assignment.getFormattedDueDate());
-            content.getChildren().add(assignmentLabel);
-        }
-        
-        alert.getDialogPane().setContent(content);
-        alert.showAndWait();
-    }
-    
-    private void addNewAssignment(SubjectData data) {
-        Dialog<Assignment> dialog = new Dialog<>();
-        dialog.setTitle("Add New Assignment");
-        dialog.setHeaderText("Enter Assignment Details");
-        
-        // Set the button types
-        ButtonType addButtonType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(addButtonType, ButtonType.CANCEL);
-        
-        // Create the form content
+        // Create content
         GridPane grid = new GridPane();
         grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20, 150, 10, 10));
+        grid.setVgap(15);
+        grid.setPadding(new Insets(20));
         
-        TextField nameField = new TextField();
-        nameField.setPromptText("Assignment Name");
+        // Row 0
+        Label dueDateHeader = new Label("Due Date");
+        dueDateHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        dueDateHeader.setTextFill(Color.web("#7f8c8d"));
+        grid.add(dueDateHeader, 0, 0);
         
-        DatePicker datePicker = new DatePicker(LocalDate.now());
+        Label statusHeader = new Label("Status");
+        statusHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        statusHeader.setTextFill(Color.web("#7f8c8d"));
+        grid.add(statusHeader, 1, 0);
         
-        ComboBox<String> statusCombo = new ComboBox<>();
-        statusCombo.getItems().addAll("Not started", "In progress", "Completed");
-        statusCombo.setValue("Not started");
+        // Row 1
+        Label dueDateValue = new Label(assignment.getFormattedDueDate());
+        dueDateValue.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        grid.add(dueDateValue, 0, 1);
         
-        TextField pointsField = new TextField();
-        pointsField.setPromptText("Points");
+        HBox statusBox = new HBox(5);
+        statusBox.setAlignment(Pos.CENTER_LEFT);
         
-        ComboBox<String> priorityCombo = new ComboBox<>();
-        priorityCombo.getItems().addAll("High", "Medium", "Low");
-        priorityCombo.setValue("Medium");
-        
-        grid.add(new Label("Name:"), 0, 0);
-        grid.add(nameField, 1, 0);
-        grid.add(new Label("Due Date:"), 0, 1);
-        grid.add(datePicker, 1, 1);
-        grid.add(new Label("Status:"), 0, 2);
-        grid.add(statusCombo, 1, 2);
-        grid.add(new Label("Points:"), 0, 3);
-        grid.add(pointsField, 1, 3);
-        grid.add(new Label("Priority:"), 0, 4);
-        grid.add(priorityCombo, 1, 4);
-        
-        dialog.getDialogPane().setContent(grid);
-        
-        // Convert the result to an assignment object when the add button is clicked
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == addButtonType) {
-                return new Assignment(
-                    nameField.getText(),
-                    datePicker.getValue(),
-                    statusCombo.getValue(),
-                    pointsField.getText(),
-                    priorityCombo.getValue()
-                );
-            }
-            return null;
-        });
-        
-        dialog.showAndWait().ifPresent(assignment -> {
-            data.getAssignments().add(assignment);
-            updateContent(currentSubject.get());
-        });
-    }
-    
-    private void searchAssignments(String query) {
-        if (query == null || query.trim().isEmpty()) {
-            updateContent(currentSubject.get());
-            return;
+        Circle statusIndicator = new Circle(5);
+        if (assignment.getStatus().equalsIgnoreCase("Not started")) {
+            statusIndicator.setFill(Color.web("#e74c3c"));
+        } else if (assignment.getStatus().equalsIgnoreCase("In progress")) {
+            statusIndicator.setFill(Color.web("#f39c12"));
+        } else if (assignment.getStatus().equalsIgnoreCase("Completed")) {
+            statusIndicator.setFill(Color.web("#2ecc71"));
         }
         
-        SubjectData data = subjectDataMap.get(currentSubject.get());
-        if (data != null) {
-            ObservableList<Assignment> filteredAssignments = FXCollections.observableArrayList();
+        Label statusLabel = new Label(assignment.getStatus());
+        statusLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        statusBox.getChildren().addAll(statusIndicator, statusLabel);
+        grid.add(statusBox, 1, 1);
+        
+        // Row 2
+        Label pointsHeader = new Label("Points");
+        pointsHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        pointsHeader.setTextFill(Color.web("#7f8c8d"));
+        grid.add(pointsHeader, 0, 2);
+        
+        Label priorityHeader = new Label("Priority");
+        priorityHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        priorityHeader.setTextFill(Color.web("#7f8c8d"));
+        grid.add(priorityHeader, 1, 2);
+        
+        // Row 3
+        Label pointsValue = new Label(assignment.getPoints());
+        pointsValue.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        grid.add(pointsValue, 0, 3);
+        
+        Label priorityValue = new Label(assignment.getPriority());
+        priorityValue.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        if (assignment.getPriority().equalsIgnoreCase("High")) {
+            priorityValue.setTextFill(Color.web("#e74c3c"));
+        } else if (assignment.getPriority().equalsIgnoreCase("Medium")) {
+            priorityValue.setTextFill(Color.web("#f39c12"));
+        } else {
+            priorityValue.setTextFill(Color.web("#2ecc71"));
+        }
+        grid.add(priorityValue, 1, 3);
+        
+        // Add description section
+        Label descriptionHeader = new Label("Description");
+        descriptionHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        descriptionHeader.setTextFill(Color.web("#7f8c8d"));
+        grid.add(descriptionHeader, 0, 4, 2, 1);
+        
+        TextArea descriptionArea = new TextArea(assignment.getDescription());
+        descriptionArea.setWrapText(true);
+        descriptionArea.setPrefHeight(100);
+        descriptionArea.setEditable(false);
+        grid.add(descriptionArea, 0, 5, 2, 1);
+        
+        // Create buttons for action
+        HBox buttonBox = new HBox(10);
+        buttonBox.setAlignment(Pos.CENTER_RIGHT);
+        buttonBox.setPadding(new Insets(10, 0, 0, 0));
+        
+        Button completeButton = new Button("Mark as Complete");
+        Button closeButton = new Button("Close");
+        
+        completeButton.setDefaultButton(true);
+        closeButton.setCancelButton(true);
+        
+        // Add action to the complete button
+        completeButton.setOnAction(e -> {
+            updateAssignmentStatus(assignment.getId(), "Completed");
+            dialog.close();
             
-            for (Assignment assignment : data.getAssignments()) {
-                if (assignment.getAssignmentName().toLowerCase().contains(query.toLowerCase())) {
-                    filteredAssignments.add(assignment);
+            // Refresh the view after status update
+            loadSubjectsAndAssignments();
+            updateContent(currentSubject.get());
+        });
+        
+        buttonBox.getChildren().addAll(completeButton, closeButton);
+        
+        // Add all components to a main content box
+        VBox contentBox = new VBox(10);
+        contentBox.getChildren().addAll(grid, buttonBox);
+        
+        // Set the dialog content
+        VBox dialogContent = new VBox();
+        dialogContent.getChildren().addAll(header, contentBox);
+        
+        dialog.getDialogPane().setContent(dialogContent);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().lookupButton(ButtonType.CLOSE).setVisible(false);
+        
+        closeButton.setOnAction(e -> dialog.close());
+        
+        dialog.showAndWait();
+    }
+    
+    /**
+     * Updates the status of an assignment in the database
+     */
+    private void updateAssignmentStatus(int assignmentId, String newStatus) {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            // First check if a record already exists
+            String checkQuery = "SELECT * FROM AssignmentProgress WHERE assignmentID = ? AND studentID = ?";
+            
+            try (PreparedStatement pstmt = conn.prepareStatement(checkQuery)) {
+                pstmt.setInt(1, assignmentId);
+                pstmt.setInt(2, studentId);
+                
+                ResultSet rs = pstmt.executeQuery();
+                
+                if (rs.next()) {
+                    // Update existing record
+                    String updateQuery = "UPDATE AssignmentProgress SET status = ?, lastUpdated = CURRENT_TIMESTAMP " +
+                                        "WHERE assignmentID = ? AND studentID = ?";
+                    
+                    try (PreparedStatement updateStmt = conn.prepareStatement(updateQuery)) {
+                        updateStmt.setString(1, newStatus);
+                        updateStmt.setInt(2, assignmentId);
+                        updateStmt.setInt(3, studentId);
+                        updateStmt.executeUpdate();
+                    }
+                } else {
+                    // Insert new record
+                    String insertQuery = "INSERT INTO AssignmentProgress (assignmentID, studentID, status, lastUpdated) " +
+                                        "VALUES (?, ?, ?, CURRENT_TIMESTAMP)";
+                    
+                    try (PreparedStatement insertStmt = conn.prepareStatement(insertQuery)) {
+                        insertStmt.setInt(1, assignmentId);
+                        insertStmt.setInt(2, studentId);
+                        insertStmt.setString(3, newStatus);
+                        insertStmt.executeUpdate();
+                    }
                 }
             }
             
-            // Create a temporary SubjectData object with filtered assignments
-            SubjectData filteredData = new SubjectData(
-                data.getSubjectName(),
-                data.getPeriod(),
-                data.getClassCode(),
-                data.getColor(),
-                filteredAssignments
-            );
+            // Show success message
+            Alert alert = new Alert(AlertType.INFORMATION);
+            alert.setTitle("Status Updated");
+            alert.setHeaderText("Assignment Status Updated");
+            alert.setContentText("The assignment status has been updated to: " + newStatus);
+            alert.showAndWait();
             
-            // Update UI with filtered data
-            dynamicContent.getChildren().clear();
-            VBox topSection = createTopSection(data);
-            VBox statisticsSection = createStatisticsSection(data);
-            VBox upcomingSection = createUpcomingSection(filteredData);
-            VBox postSection = createPostSection(data);
-            
-            dynamicContent.getChildren().addAll(topSection, statisticsSection, upcomingSection, postSection);
+        } catch (SQLException e) {
+            showError("Database Error", "Error updating assignment status: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     
-    private void watchVideo() {
+    /**
+     * Shows edit assignment dialog
+     */
+    private void editAssignment(Assignment assignment) {
+        // This would normally open an editor dialog
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Video Player");
-        alert.setHeaderText("The World's Oceans Ecosystem");
-        alert.setContentText("Video player would open here.");
+        alert.setTitle("Edit Assignment");
+        alert.setHeaderText("Edit Assignment");
+        alert.setContentText("This would open an editor for: " + assignment.getAssignmentName());
         alert.showAndWait();
     }
     
-    private void downloadResources() {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Download Resources");
-        alert.setHeaderText("Downloading Resources");
-        alert.setContentText("Resources are being downloaded.");
+    /**
+     * Shows an error dialog
+     */
+    private void showError(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
         alert.showAndWait();
     }
     
-    private void addClassMaterial() {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Add Class Material");
-        alert.setHeaderText("Add New Class Material");
-        alert.setContentText("This feature would allow teachers to add new class materials.");
-        alert.showAndWait();
+    /**
+     * Custom cell for subject display in ComboBox
+     */
+    private class SubjectListCell extends ListCell<String> {
+        @Override
+        protected void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            
+            if (empty || item == null) {
+                setText(null);
+                setGraphic(null);
+            } else {
+                SubjectData data = subjectDataMap.get(item);
+                if (data != null) {
+                    HBox content = new HBox(10);
+                    content.setAlignment(Pos.CENTER_LEFT);
+                    
+                    Rectangle colorBox = new Rectangle(12, 12);
+                    colorBox.setFill(Color.web(data.getColor()));
+                    colorBox.setArcWidth(3);
+                    colorBox.setArcHeight(3);
+                    
+                    Label nameLabel = new Label(item);
+                    nameLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 12));
+                    
+                    content.getChildren().addAll(colorBox, nameLabel);
+                    
+                    setText(null);
+                    setGraphic(content);
+                } else {
+                    setText(item);
+                    setGraphic(null);
+                }
+            }
+        }
     }
-
+    
     // Model classes
     public static class Assignment {
+        private final int id;
         private final StringProperty assignmentName;
         private final LocalDate dueDate;
         private final StringProperty formattedDueDate;
         private final StringProperty status;
         private final StringProperty points;
         private final StringProperty priority;
+        private final String description;
         
         private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM d, yyyy");
-
-        public Assignment(String assignmentName, LocalDate dueDate, String status, String points, String priority) {
+        
+        public Assignment(int id, String assignmentName, LocalDate dueDate, String status, String points, String priority, String description) {
+            this.id = id;
             this.assignmentName = new SimpleStringProperty(assignmentName);
             this.dueDate = dueDate;
             this.formattedDueDate = new SimpleStringProperty(formatDueDate(dueDate));
             this.status = new SimpleStringProperty(status);
             this.points = new SimpleStringProperty(points);
             this.priority = new SimpleStringProperty(priority);
+            this.description = description != null ? description : "No description available.";
         }
         
         private String formatDueDate(LocalDate date) {
@@ -612,7 +983,8 @@ public class AssignmentsPage {
                 return "Due " + date.format(formatter);
             }
         }
-
+        
+        public int getId() { return id; }
         public StringProperty assignmentNameProperty() { return assignmentName; }
         public StringProperty formattedDueDateProperty() { return formattedDueDate; }
         public StringProperty statusProperty() { return status; }
@@ -625,6 +997,7 @@ public class AssignmentsPage {
         public String getStatus() { return status.get(); }
         public String getPoints() { return points.get(); }
         public String getPriority() { return priority.get(); }
+        public String getDescription() { return description; }
         
         public void setStatus(String newStatus) {
             status.set(newStatus);
@@ -634,21 +1007,18 @@ public class AssignmentsPage {
     public static class SubjectData {
         private final String subjectName;
         private final String period;
-        private final String classCode;
         private final String color;
         private final ObservableList<Assignment> assignments;
         
-        public SubjectData(String subjectName, String period, String classCode, String color, ObservableList<Assignment> assignments) {
+        public SubjectData(String subjectName, String period, String color, ObservableList<Assignment> assignments) {
             this.subjectName = subjectName;
             this.period = period;
-            this.classCode = classCode;
             this.color = color;
             this.assignments = assignments;
         }
         
         public String getSubjectName() { return subjectName; }
         public String getPeriod() { return period; }
-        public String getClassCode() { return classCode; }
         public String getColor() { return color; }
         public ObservableList<Assignment> getAssignments() { return assignments; }
     }

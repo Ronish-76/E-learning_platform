@@ -21,21 +21,28 @@ public class Dashboard_S extends Application {
     private VBox mainContent;
     private VBox leftSidebar;
     private Button activeButton = null;
-
+    
+    // User information from Login class
+    private User currentUser;
+    private Label userInfoLabel;
+    
     @Override
     public void start(Stage primaryStage) {
+        // Get logged-in user from Login class
+        currentUser = Login.getLoggedInUser();
+        
         root = new BorderPane();
         root.getStyleClass().add("main-root");
-
+        
         // Left Sidebar with animation
         leftSidebar = createLeftSidebar(primaryStage);
         leftSidebar.setPrefWidth(240);
         root.setLeft(leftSidebar);
-
+        
         // Top Section (Header)
         HBox topSection = createTopSection();
         root.setTop(topSection);
-
+        
         // Main Content Area with scroll capability
         mainContent = new VBox();
         mainContent.setPadding(new Insets(25));
@@ -48,18 +55,17 @@ public class Dashboard_S extends Application {
         scrollContent.getStyleClass().add("content-scroll");
         scrollContent.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollContent.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-        
         root.setCenter(scrollContent);
-
-        // Load the home page initially
-        loadContent(new HomePage().getView());
-
+        
+        // Load the home page initially with the user ID
+        HomePage homePage = new HomePage();
+        loadContent(homePage.getView());
+        
         // Scene setup with responsive design
         Scene scene = new Scene(root, 1280, 800);
-
+        
         // Load CSS file
         URL cssUrl = getClass().getResource("/styles/style.css");
-
         if (cssUrl != null) {
             scene.getStylesheets().add(cssUrl.toExternalForm());
         } else {
@@ -67,7 +73,7 @@ public class Dashboard_S extends Application {
             // Apply fallback styles directly if CSS file is missing
             applyFallbackStyles();
         }
-
+        
         primaryStage.setTitle("E-Learning Dashboard");
         primaryStage.setMinWidth(800);
         primaryStage.setMinHeight(600);
@@ -78,7 +84,7 @@ public class Dashboard_S extends Application {
         // Apply entrance animation
         applyEntranceAnimation();
     }
-
+    
     private void applyEntranceAnimation() {
         // Animated entrance for sidebar
         TranslateTransition sidebarTransition = new TranslateTransition(Duration.millis(800), leftSidebar);
@@ -98,18 +104,30 @@ public class Dashboard_S extends Application {
         mainContent.setStyle("-fx-opacity: 0;");
         mainContent.setStyle("-fx-opacity: 1; -fx-transition: opacity 0.8s ease;");
     }
-
+    
     private VBox createLeftSidebar(Stage primaryStage) {
         VBox sidebar = new VBox(12); // Increased spacing
         sidebar.setId("sidebar");
         sidebar.setPadding(new Insets(25, 15, 25, 15));
+        
+        // User info section (if logged in)
+        if (currentUser != null) {
+            userInfoLabel = new Label("Welcome, " + currentUser.getUsername());
+            userInfoLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px;");
+            userInfoLabel.setPadding(new Insets(0, 0, 20, 0));
+            sidebar.getChildren().add(userInfoLabel);
+        }
         
         // Navigation section title
         Label navTitle = new Label("NAVIGATION");
         navTitle.getStyleClass().add("nav-section-title");
         
         // Create buttons with corresponding actions
-        Button homeBtn = createSidebarButton("Home", "home_icon.png", () -> loadContent(new HomePage().getView()));
+        Button homeBtn = createSidebarButton("Home", "home_icon.png", () -> {
+            HomePage homePage = new HomePage();
+            loadContent(homePage.getView());
+        });
+        
         Button coursesBtn = createSidebarButton("My Courses", "course_icon.png", () -> loadContent(new CoursesPage().getView()));
         Button assignmentsBtn = createSidebarButton("Assignments", "assignment_icon.png", () -> loadContent(new AssignmentsPage().getView()));
         Button quizBtn = createSidebarButton("Quizzes", "quiz_icon.png", () -> loadContent(new Quiz().getView()));
@@ -152,7 +170,7 @@ public class Dashboard_S extends Application {
         
         return sidebar;
     }
-
+    
     private void showLogoutConfirmation(Stage primaryStage) {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Logout Confirmation");
@@ -171,18 +189,17 @@ public class Dashboard_S extends Application {
             }
         });
     }
-
+    
     private Button createSidebarButton(String text, String iconFileName, Runnable action) {
         Button button = new Button(text);
         button.getStyleClass().add("sidebar-button");
-
+        
         try {
             // Create the icon
             ImageView icon = new ImageView(new Image("file:C:/Users/HP/eclipse-workspace/projectfx/resources/" + iconFileName));
             icon.setFitHeight(20);
             icon.setFitWidth(20);
             icon.setPreserveRatio(true);
-            
             // Set the button style and icon
             button.setGraphic(icon);
         } catch (Exception e) {
@@ -193,27 +210,26 @@ public class Dashboard_S extends Application {
         button.setMaxWidth(Double.MAX_VALUE);
         button.setAlignment(Pos.BASELINE_LEFT);
         button.setPadding(new Insets(12, 15, 12, 15));
-
+        
         // Button click event
         button.setOnAction(_ -> {
             setActiveButton(button);
             action.run();
         });
-
+        
         return button;
     }
-
+    
     private void setActiveButton(Button button) {
         // Remove active class from previous button
         if (activeButton != null) {
             activeButton.getStyleClass().remove("active-button");
         }
-        
         // Add active class to new button
         button.getStyleClass().add("active-button");
         activeButton = button;
     }
-
+    
     private HBox createTopSection() {
         HBox topSection = new HBox();
         topSection.setPadding(new Insets(15, 25, 15, 25));
@@ -230,7 +246,7 @@ public class Dashboard_S extends Application {
         
         Label dashboardLabel = new Label("Learning Dashboard");
         dashboardLabel.getStyleClass().add("dashboard-title");
-
+        
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
@@ -251,8 +267,19 @@ public class Dashboard_S extends Application {
         profileBtn.setGraphic(profileIcon);
         profileBtn.getStyleClass().add("profile-button");
         profileBtn.setTooltip(new Tooltip("Your Profile"));
-        profileBtn.setOnAction(_ -> loadContent(new ProfilePage().getView()));
-
+        
+        // Set profile button action to pass the current user ID
+        profileBtn.setOnAction(_ -> {
+            if (currentUser != null) {
+                ProfilePage profilePage = new ProfilePage(currentUser.getUserID());
+                loadContent(profilePage.getView());
+            } else {
+                // This shouldn't happen since we're already logged in
+                showAlert(Alert.AlertType.WARNING, "Session Error", 
+                    "Your session information could not be found. Please try logging in again.");
+            }
+        });
+        
         topSection.getChildren().addAll(menuBtn, dashboardLabel, spacer, notifBtn, profileBtn);
         
         // Add drop shadow to the top section
@@ -264,7 +291,7 @@ public class Dashboard_S extends Application {
         
         return topSection;
     }
-
+    
     private void loadContent(Node content) {
         // Add fade transition effect
         content.setOpacity(0);
@@ -275,7 +302,6 @@ public class Dashboard_S extends Application {
         tt.setFromY(20);
         tt.setToY(0);
         tt.play();
-        
         content.setOpacity(1);
     }
     
@@ -315,6 +341,14 @@ public class Dashboard_S extends Application {
         dialog.showAndWait();
     }
     
+    private void showAlert(Alert.AlertType type, String title, String message) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.show();
+    }
+    
     private void applyFallbackStyles() {
         // Apply styles directly in case CSS file is missing
         root.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 14px;");
@@ -335,13 +369,13 @@ public class Dashboard_S extends Application {
             // Add FAQ items
             faqList.getChildren().addAll(
                 createFaqItem("How do I enroll in a course?", 
-                    "To enroll in a course, browse the courses page, select your desired course, and click the 'Enroll' button."),
+                "To enroll in a course, browse the courses page, select your desired course, and click the 'Enroll' button."),
                 createFaqItem("How do I submit assignments?", 
-                    "Navigate to the Assignments page, select the assignment you want to submit, and use the submission form to upload your work."),
+                "Navigate to the Assignments page, select the assignment you want to submit, and use the submission form to upload your work."),
                 createFaqItem("How are quizzes graded?", 
-                    "Quizzes are automatically graded upon submission. You'll receive immediate feedback on your performance."),
+                "Quizzes are automatically graded upon submission. You'll receive immediate feedback on your performance."),
                 createFaqItem("Can I download course materials for offline use?", 
-                    "Yes, most course materials can be downloaded for offline use. Look for the download icon next to each resource.")
+                "Yes, most course materials can be downloaded for offline use. Look for the download icon next to each resource.")
             );
             
             view.getChildren().addAll(title, faqList);
@@ -364,7 +398,7 @@ public class Dashboard_S extends Application {
             return item;
         }
     }
-
+    
     public static void main(String[] args) {
         launch(args);
     }

@@ -1,8 +1,6 @@
 package controllers_students;
 
 import javafx.animation.FadeTransition;
-import javafx.animation.ScaleTransition;
-import javafx.animation.TranslateTransition;
 import javafx.application.Application;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -13,503 +11,750 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.effect.DropShadow;
-import javafx.scene.effect.GaussianBlur;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextAlignment;
 import javafx.stage.Stage;
 import javafx.util.Duration;
-import javafx.util.Callback;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
+import dao.DatabaseConnection;
+
+/**
+ * A streamlined course management application that displays a list of enrolled courses
+ * for the current student and shows detailed information when a course is selected.
+ */
 public class CoursesPage extends Application {
-    private TableView<Course> courseTable;
+    // Constants for color scheme
+    private static final String PRIMARY_COLOR = "#3498db";
+    private static final String SECONDARY_COLOR = "#2ecc71";
+    private static final String ACCENT_COLOR = "#e74c3c";
+    private static final String BACKGROUND_COLOR = "#f9f9f9";
+    private static final String CARD_COLOR = "#ffffff";
+    private static final String TEXT_COLOR = "#2c3e50";
+    private static final String SUBTEXT_COLOR = "#7f8c8d";
+    
+    // UI components
     private Label lessonTitleLabel;
     private TextArea lessonContentArea;
     private Button lessonActionButton;
     private Button previousButton;
     private Button nextButton;
-    private Label courseProgressLabel;
-    private ProgressBar overallProgressBar;
-    private VBox rightPanel;
-
-    // Color scheme
-    private final String PRIMARY_COLOR = "#3498db";
-    private final String SECONDARY_COLOR = "#2ecc71";
-    private final String ACCENT_COLOR = "#e74c3c";
-    private final String BACKGROUND_COLOR = "#f9f9f9";
-    private final String CARD_COLOR = "#ffffff";
-    private final String TEXT_COLOR = "#2c3e50";
-    private final String SUBTEXT_COLOR = "#7f8c8d";
-
+    private StackPane mainContent;
+    private BorderPane courseDetailView;
+    
+    // User information
+    private User currentUser;
+    private int currentUserId = 0;
+    private int studentId = 0;
+    
+    // Course data from database
+    private List<Course> enrolledCourses = new ArrayList<>();
+    
+    /**
+     * Constructor for CoursesPage
+     */
+    public CoursesPage() {
+        // Try to get logged-in user from Login class
+        this.currentUser = Login.getLoggedInUser();
+        if (currentUser != null) {
+            this.currentUserId = currentUser.getUserID();
+            try {
+                this.studentId = getStudentId(currentUserId);
+            } catch (SQLException e) {
+                showError("Database Error", "Error retrieving student ID: " + e.getMessage());
+            }
+        }
+        loadEnrolledCourses();
+    }
+    
+    /**
+     * Constructor with user ID parameter
+     */
+    public CoursesPage(int userId) {
+        this.currentUserId = userId;
+        // If Login.getLoggedInUser() is available, prefer that
+        User loggedInUser = Login.getLoggedInUser();
+        if (loggedInUser != null) {
+            this.currentUser = loggedInUser;
+            this.currentUserId = loggedInUser.getUserID();
+        }
+        
+        try {
+            this.studentId = getStudentId(currentUserId);
+        } catch (SQLException e) {
+            showError("Database Error", "Error retrieving student ID: " + e.getMessage());
+        }
+        
+        loadEnrolledCourses();
+    }
+    
+    /**
+     * Main method to launch the application
+     */
     public static void main(String[] args) {
         launch(args);
     }
-
+    
+    /**
+     * Start method required by JavaFX Application
+     */
     @Override
     public void start(Stage primaryStage) {
-        primaryStage.setTitle("Learning Dashboard");
-        
-        Scene scene = new Scene(getCoursesPage(), 1200, 800);
+        primaryStage.setTitle("My Courses");
+        BorderPane mainView = createMainView();
+        Scene scene = new Scene(mainView, 1200, 800);
         primaryStage.setScene(scene);
         primaryStage.show();
     }
-
+    
+    /**
+     * Returns the main view for the application
+     */
     public Node getView() {
-        return getCoursesPage();
-    }
-
-    private BorderPane getCoursesPage() {
-        BorderPane coursesPage = new BorderPane();
-        coursesPage.setPadding(new Insets(20));
-        coursesPage.setStyle("-fx-background-color: " + BACKGROUND_COLOR + ";");
-
-        // Create header with logo and title
-        HBox header = createHeader();
-        coursesPage.setTop(header);
-
-        // Create main content
-        VBox leftPanel = createLeftPanel();
-        leftPanel.setPrefWidth(350);
-        
-        rightPanel = createRightPanel();
-
-        SplitPane splitPane = new SplitPane(leftPanel, rightPanel);
-        splitPane.setDividerPositions(0.35);
-        splitPane.setStyle("-fx-background-color: transparent; -fx-box-border: transparent;");
-        
-        VBox contentWrapper = new VBox(10);
-        contentWrapper.getChildren().addAll(createStatisticsBar(), splitPane);
-        VBox.setVgrow(splitPane, Priority.ALWAYS);
-        
-        coursesPage.setCenter(contentWrapper);
-        
-        // Create footer
-        HBox footer = createFooter();
-        coursesPage.setBottom(footer);
-
-        // Select first course by default AFTER all components are initialized
-        courseTable.getSelectionModel().selectFirst();
-
-        return coursesPage;
+        return createMainView();
     }
     
+    /**
+     * Load enrolled courses from database for the current student
+     */
+    private void loadEnrolledCourses() {
+        enrolledCourses.clear();
+        
+        if (studentId <= 0) {
+            return; // No student ID, can't load courses
+        }
+        
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String query = "SELECT c.courseID, c.courseName, c.description, " +
+                          "COALESCE(MAX(a.completionStatus = 'Completed'), 0) * 100.0 / " +
+                          "(SELECT COUNT(*) FROM Activities WHERE courseID = c.courseID) as progress " +
+                          "FROM Courses c " +
+                          "JOIN Enrollments e ON c.courseID = e.courseID " +
+                          "LEFT JOIN Activities a ON c.courseID = a.courseID AND a.studentID = e.studentID " +
+                          "WHERE e.studentID = ? " +
+                          "GROUP BY c.courseID";
+            
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, studentId);
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        int courseId = rs.getInt("courseID");
+                        String courseName = rs.getString("courseName");
+                        String description = rs.getString("description");
+                        
+                        // Get progress as a value between 0 and 1
+                        double progress = rs.getDouble("progress") / 100.0;
+                        if (rs.wasNull()) {
+                            progress = 0.0; // Default progress if NULL
+                        }
+                        
+                        // Get course content from the database
+                        String content = getCourseContent(courseId);
+                        
+                        Course course = new Course(
+                            courseId,
+                            courseName, 
+                            progress, 
+                            content,
+                            description
+                        );
+                        
+                        enrolledCourses.add(course);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            showError("Database Error", "Error loading enrolled courses: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Get course content from the database
+     */
+    private String getCourseContent(int courseId) {
+        StringBuilder content = new StringBuilder();
+        
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String query = "SELECT lessonTitle, lessonContent FROM Lessons WHERE courseID = ?";
+            
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, courseId);
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        String title = rs.getString("lessonTitle");
+                        String lessonContent = rs.getString("lessonContent");
+                        
+                        content.append("## ").append(title).append("\n\n");
+                        content.append(lessonContent).append("\n\n");
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            content.append("Error loading course content: ").append(e.getMessage());
+        }
+        
+        // If no content was found, provide default content
+        if (content.length() == 0) {
+            content.append("This course doesn't have any lessons yet. Check back later for updates!");
+        }
+        
+        return content.toString();
+    }
+    
+    /**
+     * Creates and returns the main view with courses list
+     */
+    private BorderPane createMainView() {
+        BorderPane root = new BorderPane();
+        root.setStyle("-fx-background-color: " + BACKGROUND_COLOR + ";");
+        
+        // Header with title
+        HBox header = createHeader();
+        root.setTop(header);
+        
+        // Main content area with courses
+        mainContent = new StackPane();
+        mainContent.setPadding(new Insets(20));
+        VBox coursesView = createCoursesView();
+        courseDetailView = createCourseDetailView();
+        mainContent.getChildren().add(coursesView);
+        root.setCenter(mainContent);
+        
+        // Footer
+        HBox footer = createFooter();
+        root.setBottom(footer);
+        
+        return root;
+    }
+    
+    /**
+     * Creates the header section with title
+     */
     private HBox createHeader() {
         HBox header = new HBox(15);
-        header.setPadding(new Insets(0, 0, 15, 0));
+        header.setPadding(new Insets(20, 30, 15, 30));
         header.setAlignment(Pos.CENTER_LEFT);
+        header.setStyle("-fx-background-color: " + CARD_COLOR + ";");
         
-        // This would be your app logo
+        // App logo
         Rectangle logoPlaceholder = new Rectangle(40, 40);
         logoPlaceholder.setArcWidth(10);
         logoPlaceholder.setArcHeight(10);
         logoPlaceholder.setFill(Color.web(PRIMARY_COLOR));
         
-        Label titleLabel = new Label("Learning Dashboard");
+        Label titleLabel = new Label("My Enrolled Courses");
         titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 28));
         titleLabel.setTextFill(Color.web(TEXT_COLOR));
         
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        header.getChildren().addAll(logoPlaceholder, titleLabel);
         
-        Button settingsButton = createIconButton("⚙", "Settings");
-        Button profileButton = createIconButton("👤", "Profile");
-        
-        TextField searchField = new TextField();
-        searchField.setPromptText("Search courses...");
-        searchField.setPrefWidth(200);
-        searchField.setStyle("-fx-background-radius: 20; -fx-background-color: #ecf0f1;");
-        searchField.setPadding(new Insets(8, 15, 8, 15));
-        
-        header.getChildren().addAll(logoPlaceholder, titleLabel, spacer, searchField, settingsButton, profileButton);
+        // Add drop shadow
+        DropShadow dropShadow = createDropShadow(3);
+        header.setEffect(dropShadow);
         
         return header;
     }
     
-    private Button createIconButton(String icon, String tooltip) {
-        Button button = new Button(icon);
-        button.setStyle("-fx-background-color: transparent; -fx-font-size: 18px;");
-        button.setTooltip(new Tooltip(tooltip));
-        button.setOnMouseEntered(e -> button.setStyle("-fx-background-color: #ecf0f1; -fx-background-radius: 50%; -fx-font-size: 18px;"));
-        button.setOnMouseExited(e -> button.setStyle("-fx-background-color: transparent; -fx-font-size: 18px;"));
-        return button;
+    /**
+     * Creates the courses view with a list of enrolled courses
+     */
+    private VBox createCoursesView() {
+        VBox coursesView = new VBox(20);
+        coursesView.setPadding(new Insets(20));
+        coursesView.setAlignment(Pos.TOP_CENTER);
+        
+        Label welcomeLabel = new Label("Welcome to Your Learning Journey");
+        welcomeLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
+        welcomeLabel.setTextFill(Color.web(TEXT_COLOR));
+        
+        Label subtitleLabel = new Label("Select a course to view its content");
+        subtitleLabel.setFont(Font.font("Segoe UI", 16));
+        subtitleLabel.setTextFill(Color.web(SUBTEXT_COLOR));
+        
+        // Show message if no courses are enrolled
+        if (enrolledCourses.isEmpty()) {
+            VBox noCoursesBox = new VBox(15);
+            noCoursesBox.setAlignment(Pos.CENTER);
+            noCoursesBox.setPadding(new Insets(50));
+            noCoursesBox.setStyle("-fx-background-color: " + CARD_COLOR + "; -fx-background-radius: 10;");
+            
+            Label noCoursesLabel = new Label("You haven't enrolled in any courses yet");
+            noCoursesLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
+            noCoursesLabel.setTextFill(Color.web(TEXT_COLOR));
+            
+            Label enrollSuggestion = new Label("Visit the Available Courses page to browse and enroll in courses");
+            enrollSuggestion.setFont(Font.font("Segoe UI", 14));
+            enrollSuggestion.setTextFill(Color.web(SUBTEXT_COLOR));
+            
+            Button browseButton = new Button("Browse Available Courses");
+            browseButton.setStyle(
+                "-fx-background-color: " + PRIMARY_COLOR + "; " +
+                "-fx-text-fill: white; " +
+                "-fx-background-radius: 5; " +
+                "-fx-font-weight: bold;"
+            );
+            
+            // Add action to navigate to HomePage or trigger the appropriate method
+            browseButton.setOnAction(e -> {
+                // Navigate to the Home Page or equivalent
+                // This would depend on your navigation setup
+            });
+            
+            noCoursesBox.getChildren().addAll(noCoursesLabel, enrollSuggestion, browseButton);
+            coursesView.getChildren().addAll(welcomeLabel, subtitleLabel, noCoursesBox);
+            
+            return coursesView;
+        }
+        
+        // Courses grid
+        GridPane courseGrid = new GridPane();
+        courseGrid.setHgap(20);
+        courseGrid.setVgap(20);
+        courseGrid.setAlignment(Pos.CENTER);
+        
+        ObservableList<Course> courses = FXCollections.observableArrayList(enrolledCourses);
+        
+        int column = 0;
+        int row = 0;
+        for (Course course : courses) {
+            VBox courseCard = createCourseCard(course);
+            courseGrid.add(courseCard, column, row);
+            
+            column++;
+            if (column > 2) {
+                column = 0;
+                row++;
+            }
+        }
+        
+        coursesView.getChildren().addAll(welcomeLabel, subtitleLabel, courseGrid);
+        return coursesView;
     }
     
-    private HBox createStatisticsBar() {
-        HBox statsBar = new HBox(20);
-        statsBar.setPadding(new Insets(15));
-        statsBar.setStyle("-fx-background-color: " + CARD_COLOR + "; -fx-background-radius: 10;");
-        statsBar.setEffect(createDropShadow(3));
-        statsBar.setAlignment(Pos.CENTER_LEFT);
+    /**
+     * Creates a card for an individual course
+     */
+    private VBox createCourseCard(Course course) {
+        VBox card = new VBox(10);
+        card.setPadding(new Insets(20));
+        card.setPrefWidth(320);
+        card.setPrefHeight(200);
+        card.setStyle("-fx-background-color: " + CARD_COLOR + "; -fx-background-radius: 10;");
+        card.setEffect(createDropShadow(5));
         
-        Label titleLabel = new Label("Your Progress");
-        titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 16));
+        Label titleLabel = new Label(course.getName());
+        titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
         titleLabel.setTextFill(Color.web(TEXT_COLOR));
         
-        Label statsLabel = new Label("7 Courses • 28 Lessons • 14 Hours");
-        statsLabel.setFont(Font.font("Segoe UI", 14));
-        statsLabel.setTextFill(Color.web(SUBTEXT_COLOR));
+        // Use the description from the course object
+        Label descLabel = new Label(course.getDescription());
+        descLabel.setFont(Font.font("Segoe UI", 14));
+        descLabel.setTextFill(Color.web(SUBTEXT_COLOR));
+        descLabel.setWrapText(true);
+        
+        // Progress indicator
+        HBox progressBox = new HBox(10);
+        progressBox.setAlignment(Pos.CENTER_LEFT);
+        
+        ProgressBar progressBar = new ProgressBar(course.getProgress());
+        progressBar.setPrefWidth(200);
+        progressBar.setStyle("-fx-accent: " + PRIMARY_COLOR + ";");
+        
+        Label percentLabel = new Label(String.format("%.0f%%", course.getProgress() * 100));
+        percentLabel.setTextFill(Color.web(PRIMARY_COLOR));
+        percentLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
+        
+        progressBox.getChildren().addAll(progressBar, percentLabel);
         
         Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        VBox.setVgrow(spacer, Priority.ALWAYS);
         
-        courseProgressLabel = new Label("Overall: 45%");
-        courseProgressLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
-        courseProgressLabel.setTextFill(Color.web(PRIMARY_COLOR));
+        // Action button
+        Button actionButton = new Button(getButtonTextForProgress(course.getProgress()));
+        actionButton.setPrefWidth(Double.MAX_VALUE);
+        actionButton.setStyle(getButtonStyleForProgress(course.getProgress()));
         
-        overallProgressBar = new ProgressBar(0.45);
-        overallProgressBar.setPrefWidth(200);
-        overallProgressBar.setStyle("-fx-accent: " + PRIMARY_COLOR + ";");
+        // Set click event
+        card.setOnMouseClicked(e -> showCourseDetail(course));
         
-        statsBar.getChildren().addAll(titleLabel, statsLabel, spacer, courseProgressLabel, overallProgressBar);
-        
-        return statsBar;
+        card.getChildren().addAll(titleLabel, descLabel, spacer, progressBox, actionButton);
+        return card;
     }
-
-    private VBox createLeftPanel() {
-        VBox leftPanel = new VBox(15);
-        leftPanel.setPadding(new Insets(15));
-        leftPanel.setStyle("-fx-background-color: " + CARD_COLOR + "; -fx-background-radius: 10;");
-        leftPanel.setEffect(createDropShadow(5));
-
-        HBox panelHeader = new HBox(10);
-        panelHeader.setAlignment(Pos.CENTER_LEFT);
+    
+    /**
+     * Creates the detailed view of a course
+     */
+    private BorderPane createCourseDetailView() {
+        BorderPane detailView = new BorderPane();
+        detailView.setPadding(new Insets(20));
+        detailView.setStyle("-fx-background-color: " + CARD_COLOR + "; -fx-background-radius: 10;");
         
-        Label panelTitle = new Label("My Courses");
-        panelTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
-        panelTitle.setTextFill(Color.web(TEXT_COLOR));
+        // Header with back button and title
+        HBox header = new HBox(15);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setPadding(new Insets(0, 0, 20, 0));
         
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Button backButton = new Button("← Back to courses");
+        backButton.setStyle(
+            "-fx-background-color: transparent; " +
+            "-fx-text-fill: " + PRIMARY_COLOR + ";" +
+            "-fx-font-weight: bold;"
+        );
+        backButton.setOnAction(e -> returnToCoursesView());
         
-        ComboBox<String> sortBox = new ComboBox<>(FXCollections.observableArrayList("All Courses", "In Progress", "Completed", "Not Started"));
-        sortBox.setValue("All Courses");
-        sortBox.setStyle("-fx-background-radius: 5;");
-        
-        panelHeader.getChildren().addAll(panelTitle, spacer, sortBox);
-        
-        courseTable = new TableView<>();
-        courseTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        courseTable.setStyle("-fx-background-color: transparent; -fx-border-color: transparent;");
-
-        TableColumn<Course, String> subjectColumn = new TableColumn<>("Subject");
-        subjectColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
-        subjectColumn.setCellFactory(createSubjectCellFactory());
-
-        TableColumn<Course, Double> progressColumn = new TableColumn<>("Progress");
-        progressColumn.setCellValueFactory(new PropertyValueFactory<>("progress"));
-        progressColumn.setCellFactory(createProgressBarCellFactory());
-        progressColumn.setPrefWidth(120);
-
-        courseTable.getColumns().addAll(subjectColumn, progressColumn);
-        courseTable.setItems(getSampleCourses());
-        courseTable.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
-            if (newSelection != null) {
-                updateRightPanel(newSelection);
-            }
-        });
-        
-        // Removed the call to selectFirst() here
-
-        leftPanel.getChildren().addAll(panelHeader, courseTable);
-        VBox.setVgrow(courseTable, Priority.ALWAYS);
-        return leftPanel;
-    }
-
-    private VBox createRightPanel() {
-        VBox rightPanel = new VBox(15);
-        rightPanel.setPadding(new Insets(15));
-        rightPanel.setStyle("-fx-background-color: " + CARD_COLOR + "; -fx-background-radius: 10;");
-        rightPanel.setEffect(createDropShadow(5));
-
-        // Panel header with navigation
-        HBox panelHeader = new HBox(10);
-        panelHeader.setAlignment(Pos.CENTER_LEFT);
-        
-        lessonTitleLabel = new Label("Select a course");
-        lessonTitleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
+        lessonTitleLabel = new Label("Course Details");
+        lessonTitleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
         lessonTitleLabel.setTextFill(Color.web(TEXT_COLOR));
         
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        header.getChildren().addAll(backButton, lessonTitleLabel);
         
-        previousButton = new Button("←");
-        previousButton.setStyle("-fx-background-color: #ecf0f1; -fx-background-radius: 50%; -fx-min-width: 30px; -fx-min-height: 30px;");
-        previousButton.setDisable(true);
-        previousButton.setOnAction(e -> {
-            int currentIndex = courseTable.getSelectionModel().getSelectedIndex();
-            if (currentIndex > 0) {
-                courseTable.getSelectionModel().select(currentIndex - 1);
-            }
-        });
-        
-        nextButton = new Button("→");
-        nextButton.setStyle("-fx-background-color: #ecf0f1; -fx-background-radius: 50%; -fx-min-width: 30px; -fx-min-height: 30px;");
-        nextButton.setDisable(true);
-        nextButton.setOnAction(e -> {
-            int currentIndex = courseTable.getSelectionModel().getSelectedIndex();
-            if (currentIndex < courseTable.getItems().size() - 1) {
-                courseTable.getSelectionModel().select(currentIndex + 1);
-            }
-        });
-        
-        panelHeader.getChildren().addAll(lessonTitleLabel, spacer, previousButton, nextButton);
-
-        // Lesson content section with metadata
-        VBox contentSection = new VBox(15);
+        // Course content
+        VBox contentSection = new VBox(20);
+        contentSection.setPadding(new Insets(20));
         contentSection.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 8;");
-        contentSection.setPadding(new Insets(15));
         
+        // Metadata bar
         HBox metadataBar = new HBox(20);
         metadataBar.setAlignment(Pos.CENTER_LEFT);
+        metadataBar.setPadding(new Insets(10, 0, 10, 0));
         
         Label timeLabel = new Label("⏱️ 20 min");
         timeLabel.setTextFill(Color.web(SUBTEXT_COLOR));
+        timeLabel.setFont(Font.font("Segoe UI", 14));
         
         Label difficultyLabel = new Label("📊 Intermediate");
         difficultyLabel.setTextFill(Color.web(SUBTEXT_COLOR));
+        difficultyLabel.setFont(Font.font("Segoe UI", 14));
         
         Label authorLabel = new Label("👨‍🏫 Prof. Smith");
         authorLabel.setTextFill(Color.web(SUBTEXT_COLOR));
+        authorLabel.setFont(Font.font("Segoe UI", 14));
         
         metadataBar.getChildren().addAll(timeLabel, difficultyLabel, authorLabel);
-
+        
+        // Lesson content
         lessonContentArea = new TextArea();
         lessonContentArea.setWrapText(true);
         lessonContentArea.setEditable(false);
-        lessonContentArea.setPrefHeight(300);
-        lessonContentArea.setPromptText("Select a course to view lesson content");
-        lessonContentArea.setStyle("-fx-control-inner-background: white; -fx-background-color: white; -fx-border-color: #ecf0f1; -fx-border-radius: 5;");
+        lessonContentArea.setPrefHeight(400);
+        lessonContentArea.setStyle(
+            "-fx-control-inner-background: white; " +
+            "-fx-background-color: white; " +
+            "-fx-border-color: #ecf0f1; " +
+            "-fx-border-radius: 5;"
+        );
         lessonContentArea.setFont(Font.font("Segoe UI", 14));
         
         contentSection.getChildren().addAll(metadataBar, lessonContentArea);
         VBox.setVgrow(contentSection, Priority.ALWAYS);
-
-        // Action buttons
-        HBox buttonBox = new HBox(15);
-        buttonBox.setAlignment(Pos.CENTER);
         
-        Button resourcesButton = new Button("Resources");
-        resourcesButton.setStyle("-fx-background-color: transparent; -fx-text-fill: " + PRIMARY_COLOR + "; -fx-border-color: " + PRIMARY_COLOR + "; -fx-border-radius: 5;");
-        resourcesButton.setPrefWidth(120);
+        // Button row
+        HBox buttonRow = new HBox(15);
+        buttonRow.setAlignment(Pos.CENTER);
+        buttonRow.setPadding(new Insets(20, 0, 0, 0));
         
-        Button notesButton = new Button("My Notes");
-        notesButton.setStyle("-fx-background-color: transparent; -fx-text-fill: " + PRIMARY_COLOR + "; -fx-border-color: " + PRIMARY_COLOR + "; -fx-border-radius: 5;");
-        notesButton.setPrefWidth(120);
-
+        previousButton = new Button("Previous Lesson");
+        previousButton.setStyle(
+            "-fx-background-color: transparent; " +
+            "-fx-text-fill: " + PRIMARY_COLOR + "; " +
+            "-fx-border-color: " + PRIMARY_COLOR + "; " +
+            "-fx-border-radius: 5;"
+        );
+        previousButton.setPrefWidth(150);
+        
+        nextButton = new Button("Next Lesson");
+        nextButton.setStyle(
+            "-fx-background-color: transparent; " +
+            "-fx-text-fill: " + PRIMARY_COLOR + "; " +
+            "-fx-border-color: " + PRIMARY_COLOR + "; " +
+            "-fx-border-radius: 5;"
+        );
+        nextButton.setPrefWidth(150);
+        
         lessonActionButton = new Button("Start Lesson");
-        lessonActionButton.setPrefWidth(150);
+        lessonActionButton.setPrefWidth(200);
         lessonActionButton.setStyle(
             "-fx-background-color: " + SECONDARY_COLOR + "; " +
-            "-fx-text-fill: white; " + 
+            "-fx-text-fill: white; " +
             "-fx-background-radius: 5; " +
             "-fx-font-weight: bold;"
         );
-        lessonActionButton.setOnAction(e -> {
-            Course selectedCourse = courseTable.getSelectionModel().getSelectedItem();
-            if (selectedCourse != null) {
-                // Implement lesson action logic here
-                if (selectedCourse.getProgress() == 0.0) {
-                    // Start the lesson
-                    lessonActionButton.setText("Continue Lesson");
-                    lessonActionButton.setStyle("-fx-background-color: " + PRIMARY_COLOR + "; -fx-text-fill: white; -fx-background-radius: 5; -fx-font-weight: bold;");
-                } else if (selectedCourse.getProgress() < 1.0) {
-                    // Continue the lesson
-                    lessonActionButton.setText("Review Lesson");
-                    lessonActionButton.setStyle("-fx-background-color: " + ACCENT_COLOR + "; -fx-text-fill: white; -fx-background-radius: 5; -fx-font-weight: bold;");
-                }
-            }
-        });
         
-        buttonBox.getChildren().addAll(resourcesButton, notesButton, lessonActionButton);
-
-        rightPanel.getChildren().addAll(panelHeader, contentSection, buttonBox);
-        return rightPanel;
+        Region spacer1 = new Region();
+        Region spacer2 = new Region();
+        HBox.setHgrow(spacer1, Priority.ALWAYS);
+        HBox.setHgrow(spacer2, Priority.ALWAYS);
+        
+        buttonRow.getChildren().addAll(previousButton, spacer1, lessonActionButton, spacer2, nextButton);
+        
+        detailView.setTop(header);
+        detailView.setCenter(contentSection);
+        detailView.setBottom(buttonRow);
+        
+        return detailView;
     }
     
+    /**
+     * Creates the footer section
+     */
     private HBox createFooter() {
         HBox footer = new HBox(10);
-        footer.setPadding(new Insets(15, 0, 0, 0));
-        footer.setAlignment(Pos.CENTER_RIGHT);
+        footer.setPadding(new Insets(15));
+        footer.setAlignment(Pos.CENTER);
+        footer.setStyle("-fx-background-color: " + CARD_COLOR + ";");
         
-        Label supportLabel = new Label("Need help? Contact support");
-        supportLabel.setTextFill(Color.web(SUBTEXT_COLOR));
-        supportLabel.setFont(Font.font("Segoe UI", 12));
+        Label copyrightLabel = new Label("© 2023 Learning Platform | Need help? Contact support");
+        copyrightLabel.setTextFill(Color.web(SUBTEXT_COLOR));
+        copyrightLabel.setFont(Font.font("Segoe UI", 12));
         
-        footer.getChildren().add(supportLabel);
-        
+        footer.getChildren().add(copyrightLabel);
         return footer;
     }
-
-    private void updateRightPanel(Course course) {
-        // Create fade out transition
-        FadeTransition fadeOut = new FadeTransition(Duration.millis(200), rightPanel);
-        fadeOut.setFromValue(1.0);
-        fadeOut.setToValue(0.8);
+    
+    /**
+     * Shows detailed information for a selected course
+     */
+    private void showCourseDetail(Course course) {
+        // Update course detail content
+        lessonTitleLabel.setText(course.getName());
+        lessonContentArea.setText(course.getLessonContent());
         
-        TranslateTransition moveOut = new TranslateTransition(Duration.millis(200), rightPanel);
-        moveOut.setByX(20);
+        // Update action button based on progress
+        lessonActionButton.setText(getButtonTextForProgress(course.getProgress()));
+        lessonActionButton.setStyle(getButtonStyleForProgress(course.getProgress()));
         
-        fadeOut.setOnFinished(e -> {
-            // Update content
-            lessonTitleLabel.setText(course.getName());
-            lessonContentArea.setText(course.getLessonContent());
-            
-            Button actionButton = lessonActionButton;
-            if (course.getProgress() == 0.0) {
-                actionButton.setText("Start Lesson");
-                actionButton.setStyle("-fx-background-color: " + SECONDARY_COLOR + "; -fx-text-fill: white; -fx-background-radius: 5; -fx-font-weight: bold;");
-            } else if (course.getProgress() < 1.0) {
-                actionButton.setText("Continue Lesson");
-                actionButton.setStyle("-fx-background-color: " + PRIMARY_COLOR + "; -fx-text-fill: white; -fx-background-radius: 5; -fx-font-weight: bold;");
-            } else {
-                actionButton.setText("Review Lesson");
-                actionButton.setStyle("-fx-background-color: " + ACCENT_COLOR + "; -fx-text-fill: white; -fx-background-radius: 5; -fx-font-weight: bold;");
+        // Set action for the lesson button (e.g., mark as completed)
+        lessonActionButton.setOnAction(e -> {
+            try {
+                markLessonAsCompleted(course.getId(), studentId);
+                
+                // Show success message
+                Alert successAlert = new Alert(AlertType.INFORMATION);
+                successAlert.setTitle("Progress Updated");
+                successAlert.setHeaderText("Lesson Completed!");
+                successAlert.setContentText("Your progress has been updated.");
+                successAlert.show();
+                
+                // Reload courses to refresh progress
+                loadEnrolledCourses();
+                returnToCoursesView();
+                
+            } catch (SQLException ex) {
+                showError("Error", "Could not update progress: " + ex.getMessage());
             }
-            
-            // Enable buttons
-            lessonActionButton.setDisable(false);
-            previousButton.setDisable(courseTable.getSelectionModel().getSelectedIndex() == 0);
-            nextButton.setDisable(courseTable.getSelectionModel().getSelectedIndex() == courseTable.getItems().size() - 1);
-            
-            // Create fade in transition
-            FadeTransition fadeIn = new FadeTransition(Duration.millis(300), rightPanel);
-            fadeIn.setFromValue(0.8);
-            fadeIn.setToValue(1.0);
-            
-            TranslateTransition moveIn = new TranslateTransition(Duration.millis(300), rightPanel);
-            moveIn.setByX(-20);
-            
-            fadeIn.play();
-            moveIn.play();
         });
         
+        // Transition to the detail view
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(200), mainContent);
+        fadeOut.setFromValue(1.0);
+        fadeOut.setToValue(0.0);
+        fadeOut.setOnFinished(e -> {
+            mainContent.getChildren().clear();
+            mainContent.getChildren().add(courseDetailView);
+            FadeTransition fadeIn = new FadeTransition(Duration.millis(300), mainContent);
+            fadeIn.setFromValue(0.0);
+            fadeIn.setToValue(1.0);
+            fadeIn.play();
+        });
         fadeOut.play();
-        moveOut.play();
-    }
-
-    private Callback<TableColumn<Course, Double>, TableCell<Course, Double>> createProgressBarCellFactory() {
-        return column -> new TableCell<>() {
-            private final ProgressBar progressBar = new ProgressBar();
-            private final Label percentLabel = new Label();
-            private final HBox container = new HBox(10);
-            
-            {
-                progressBar.setMaxWidth(Double.MAX_VALUE);
-                progressBar.setPrefHeight(10);
-                progressBar.setStyle("-fx-accent: " + PRIMARY_COLOR + ";");
-                HBox.setHgrow(progressBar, Priority.ALWAYS);
-                
-                percentLabel.setTextFill(Color.web(TEXT_COLOR));
-                percentLabel.setFont(Font.font("Segoe UI", 12));
-                
-                container.setAlignment(Pos.CENTER_LEFT);
-                container.getChildren().addAll(progressBar, percentLabel);
-            }
-
-            @Override
-            protected void updateItem(Double progress, boolean empty) {
-                super.updateItem(progress, empty);
-                
-                if (empty || progress == null) {
-                    setGraphic(null);
-                } else {
-                    progressBar.setProgress(progress);
-                    percentLabel.setText(String.format("%.0f%%", progress * 100));
-                    setGraphic(container);
-                }
-            }
-        };
     }
     
-    private Callback<TableColumn<Course, String>, TableCell<Course, String>> createSubjectCellFactory() {
-        return column -> new TableCell<>() {
-            private final Label nameLabel = new Label();
-            private final Label descLabel = new Label();
-            private final VBox container = new VBox(3);
+    /**
+     * Mark a lesson as completed in the database
+     */
+    private void markLessonAsCompleted(int courseId, int studentId) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            // Get the next lesson that isn't completed
+            String lessonQuery = "SELECT lessonID FROM Lessons WHERE courseID = ? " +
+                                "AND lessonID NOT IN (" +
+                                "  SELECT lessonID FROM LessonProgress " +
+                                "  WHERE studentID = ? AND completionStatus = 'Completed'" +
+                                ") ORDER BY lessonID LIMIT 1";
             
-            {
-                nameLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
-                nameLabel.setTextFill(Color.web(TEXT_COLOR));
+            try (PreparedStatement pstmt = conn.prepareStatement(lessonQuery)) {
+                pstmt.setInt(1, courseId);
+                pstmt.setInt(2, studentId);
                 
-                descLabel.setFont(Font.font("Segoe UI", 12));
-                descLabel.setTextFill(Color.web(SUBTEXT_COLOR));
-                
-                container.setAlignment(Pos.CENTER_LEFT);
-                container.getChildren().addAll(nameLabel, descLabel);
-                container.setPadding(new Insets(5, 0, 5, 0));
-            }
-
-            @Override
-            protected void updateItem(String name, boolean empty) {
-                super.updateItem(name, empty);
-                
-                if (empty || name == null) {
-                    setGraphic(null);
-                } else {
-                    nameLabel.setText(name);
-                    if (name.equals("Mathematics")) {
-                        descLabel.setText("Algebra • Advanced");
-                    } else if (name.equals("Science")) {
-                        descLabel.setText("Physics • Intermediate");
-                    } else if (name.equals("History")) {
-                        descLabel.setText("Ancient Rome • Advanced");
-                    } else if (name.equals("Literature")) {
-                        descLabel.setText("Shakespeare • Intermediate");
-                    } else if (name.equals("Computer Science")) {
-                        descLabel.setText("Programming • Intermediate");
-                    } else if (name.equals("Art")) {
-                        descLabel.setText("Impressionism • Beginner");
-                    } else if (name.equals("Music")) {
-                        descLabel.setText("Theory • Beginner");
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        int lessonId = rs.getInt("lessonID");
+                        
+                        // Mark the lesson as completed
+                        String updateQuery = "INSERT INTO LessonProgress (studentID, lessonID, completionStatus, completionDate) " +
+                                          "VALUES (?, ?, 'Completed', CURRENT_TIMESTAMP) " +
+                                          "ON DUPLICATE KEY UPDATE completionStatus = 'Completed', completionDate = CURRENT_TIMESTAMP";
+                        
+                        try (PreparedStatement updateStmt = conn.prepareStatement(updateQuery)) {
+                            updateStmt.setInt(1, studentId);
+                            updateStmt.setInt(2, lessonId);
+                            updateStmt.executeUpdate();
+                        }
+                        
+                        // Log activity
+                        logActivity(studentId, courseId, "Lesson Completion", "Completed a lesson", "Completed");
+                    } else {
+                        throw new SQLException("No more lessons to complete for this course");
                     }
-                    setGraphic(container);
                 }
             }
-        };
+        }
     }
-
-    private ObservableList<Course> getSampleCourses() {
-        return FXCollections.observableArrayList(
-            new Course("Mathematics", 0.75, "This lesson covers advanced algebraic equations and their applications in real-world scenarios. We'll explore linear equations, quadratic formulas, and how to solve complex problems step by step.\n\nLearning Objectives:\n• Understand the fundamental properties of algebraic expressions\n• Learn techniques for solving quadratic equations\n• Apply algebraic concepts to word problems\n• Develop problem-solving strategies using algebraic methods"),
-            new Course("Science", 0.45, "Introduction to the scientific method and Newton's laws of motion. This lesson explores how scientists investigate natural phenomena and the fundamental principles that govern motion.\n\nTopics covered:\n• The steps of the scientific method\n• Newton's First Law: Inertia\n• Newton's Second Law: F=ma\n• Newton's Third Law: Action and Reaction\n• Practical applications of Newton's laws in everyday situations"),
-            new Course("History", 0.90, "The rise and fall of the Roman Empire. This comprehensive lesson examines the historical factors that contributed to Rome's dominance and eventual decline.\n\nKey periods covered:\n• The founding of Rome and early republican period\n• The transition from Republic to Empire\n• The Pax Romana and height of imperial power\n• Economic and military challenges of the late empire\n• The division and eventual fall of Rome"),
-            new Course("Literature", 0.30, "Analysis of Shakespeare's plays, focusing on Hamlet. This lesson examines the themes, characters, and literary devices in one of the most famous tragedies ever written.\n\nAreas of focus:\n• Historical context of Elizabethan theater\n• Character analysis: Hamlet, Ophelia, Claudius, and Gertrude\n• Major themes: revenge, madness, mortality\n• Shakespeare's use of soliloquy and theatrical devices\n• The play's influence on modern literature"),
-            new Course("Computer Science", 0.60, "Basic programming concepts and data structures. This lesson introduces fundamental programming principles and common data structures used in software development.\n\nConcepts covered:\n• Variables, data types, and operations\n• Control structures: conditionals and loops\n• Arrays, lists, and dictionaries\n• Introduction to algorithms and complexity\n• Problem-solving approaches in programming"),
-            new Course("Art", 0.15, "Exploring impressionism and its major artists. This lesson examines the revolutionary art movement that changed how we perceive visual representation.\n\nHighlights:\n• Origins of Impressionism in 19th century France\n• Key artists: Monet, Renoir, Degas, and Morisot\n• Techniques and characteristics of Impressionist painting\n• The movement's impact on subsequent art developments\n• Analysis of iconic Impressionist works"),
-            new Course("Music", 0.0, "Introduction to music theory and composition. This foundational lesson covers the basic elements needed to understand and create music.\n\nTopics include:\n• Musical notation and reading sheet music\n• Scales, keys, and chord structures\n• Rhythm, tempo, and time signatures\n• Basic compositional techniques\n• Practical exercises for beginning musicians")
-        );
+    
+    /**
+     * Log an activity in the database
+     */
+    private void logActivity(int studentId, int courseId, String activityType, String description, String status) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String query = "INSERT INTO Activities (studentID, courseID, activityType, description, completionStatus) " +
+                          "VALUES (?, ?, ?, ?, ?)";
+            
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, studentId);
+                pstmt.setInt(2, courseId);
+                pstmt.setString(3, activityType);
+                pstmt.setString(4, description);
+                pstmt.setString(5, status);
+                pstmt.executeUpdate();
+            }
+        }
     }
-
+    
+    /**
+     * Returns to the courses list view
+     */
+    private void returnToCoursesView() {
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(200), mainContent);
+        fadeOut.setFromValue(1.0);
+        fadeOut.setToValue(0.0);
+        fadeOut.setOnFinished(e -> {
+            mainContent.getChildren().clear();
+            mainContent.getChildren().add(createCoursesView());
+            FadeTransition fadeIn = new FadeTransition(Duration.millis(300), mainContent);
+            fadeIn.setFromValue(0.0);
+            fadeIn.setToValue(1.0);
+            fadeIn.play();
+        });
+        fadeOut.play();
+    }
+    
+    /**
+     * Returns appropriate button text based on course progress
+     */
+    private String getButtonTextForProgress(double progress) {
+        if (progress == 0.0) {
+            return "Start Course";
+        } else if (progress < 1.0) {
+            return "Continue Course";
+        } else {
+            return "Review Course";
+        }
+    }
+    
+    /**
+     * Returns appropriate button style based on course progress
+     */
+    private String getButtonStyleForProgress(double progress) {
+        String baseStyle = "-fx-text-fill: white; -fx-background-radius: 5; -fx-font-weight: bold;";
+        if (progress == 0.0) {
+            return "-fx-background-color: " + SECONDARY_COLOR + "; " + baseStyle;
+        } else if (progress < 1.0) {
+            return "-fx-background-color: " + PRIMARY_COLOR + "; " + baseStyle;
+        } else {
+            return "-fx-background-color: " + ACCENT_COLOR + "; " + baseStyle;
+        }
+    }
+    
+    /**
+     * Get student ID from user ID
+     */
+    private int getStudentId(int userId) throws SQLException {
+        if (userId <= 0) {
+            return 0;
+        }
+        
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String query = "SELECT studentID FROM Students WHERE userID = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, userId);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getInt("studentID");
+                    } else {
+                        return 0; // No student record found
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Creates a drop shadow effect with specified radius
+     */
     private DropShadow createDropShadow(double radius) {
         DropShadow dropShadow = new DropShadow();
         dropShadow.setRadius(radius);
         dropShadow.setOffsetX(0);
-        dropShadow.setOffsetY(1);
+        dropShadow.setOffsetY(2);
         dropShadow.setColor(Color.rgb(0, 0, 0, 0.2));
         return dropShadow;
     }
-
+    
+    /**
+     * Helper method to show error alerts
+     */
+    private void showError(String title, String message) {
+        Alert alert = new Alert(AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+    
+    /**
+     * Course data model class
+     */
     public static class Course {
+        private final int id;
         private final SimpleStringProperty name;
         private final SimpleDoubleProperty progress;
         private final String lessonContent;
-
-        public Course(String name, double progress, String lessonContent) {
+        private final String description;
+        
+        /**
+         * Creates a new Course instance
+         * 
+         * @param id The course ID
+         * @param name The name of the course
+         * @param progress The completion progress (0.0 to 1.0)
+         * @param lessonContent The content for the lesson
+         * @param description The course description
+         */
+        public Course(int id, String name, double progress, String lessonContent, String description) {
+            this.id = id;
             this.name = new SimpleStringProperty(name);
             this.progress = new SimpleDoubleProperty(progress);
             this.lessonContent = lessonContent;
+            this.description = description;
         }
-
+        
+        public int getId() { return id; }
         public String getName() { return name.get(); }
         public double getProgress() { return progress.get(); }
         public String getLessonContent() { return lessonContent; }
+        public String getDescription() { return description; }
     }
 }
