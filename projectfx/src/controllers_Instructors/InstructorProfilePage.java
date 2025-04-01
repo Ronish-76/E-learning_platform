@@ -1,4 +1,4 @@
-package controllers_Instructor;
+package controllers_Instructors;
 
 import dao.DatabaseConnection;
 import javafx.geometry.Insets;

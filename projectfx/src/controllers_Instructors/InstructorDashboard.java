@@ -2,7 +2,6 @@ package controllers_Instructors;
 
 import java.net.URL;
 
-import controllers_Instructor.InstructorProfilePage;
 import javafx.animation.TranslateTransition;
 import javafx.application.Application;
 import javafx.geometry.*;
