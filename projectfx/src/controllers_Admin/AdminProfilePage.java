@@ -5,99 +5,47 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
+import javafx.scene.control.Alert.AlertType;
 
 /**
- * Admin Profile Page for viewing and editing admin information
+ * Simplified Admin Profile Page
  */
 public class AdminProfilePage {
-    private String currentUsername = "Admin User";
+    // Basic user data
+    private String username = "admin";
+    private String email = "Admin@gmail.com";
     
     public Node getView() {
         VBox view = new VBox(20);
-        view.getStyleClass().add("page-content");
+        view.setPadding(new Insets(20));
         
         Label title = new Label("Admin Profile");
-        title.getStyleClass().add("page-title");
+        title.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
         
         // Profile info section
-        HBox profileSection = new HBox(30);
+        VBox profileSection = new VBox(15);
         profileSection.setPadding(new Insets(20));
-        profileSection.getStyleClass().add("profile-section");
+        profileSection.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 5px;");
         
-        // Left side - Avatar and basic info
-        VBox profileBasics = new VBox(15);
-        profileBasics.setAlignment(Pos.TOP_CENTER);
+        Label nameLabel = new Label(username);
+        nameLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
         
-        // Avatar placeholder (in a real app, this would be a proper image)
-        Rectangle avatarPlaceholder = new Rectangle(120, 120);
-        avatarPlaceholder.setArcWidth(20);
-        avatarPlaceholder.setArcHeight(20);
-        avatarPlaceholder.setFill(Color.LIGHTGRAY);
-        
-        Button changeAvatarBtn = new Button("Change Avatar");
-        changeAvatarBtn.getStyleClass().add("secondary-button");
-        
-        Label nameLabel = new Label(currentUsername);
-        nameLabel.getStyleClass().add("profile-name");
-        
-        Label roleLabel = new Label("Administrator");
-        roleLabel.getStyleClass().add("profile-role");
-        
-        Label lastLoginLabel = new Label("Last login: Today, 14:25 PM");
-        lastLoginLabel.getStyleClass().add("profile-last-login");
-        
-        profileBasics.getChildren().addAll(avatarPlaceholder, changeAvatarBtn, nameLabel, roleLabel, lastLoginLabel);
-        
-        // Right side - Editable profile details
-        VBox profileDetails = new VBox(15);
-        profileDetails.setAlignment(Pos.TOP_LEFT);
-        profileDetails.setPrefWidth(400);
-        
-        Label detailsTitle = new Label("Profile Details");
-        detailsTitle.getStyleClass().add("section-title");
-        
-        // Create form fields
+        // Profile form
         GridPane formGrid = new GridPane();
         formGrid.setVgap(10);
         formGrid.setHgap(15);
         
-        Label firstNameLabel = new Label("First Name:");
-        TextField firstNameField = new TextField("Admin");
-        
-        Label lastNameLabel = new Label("Last Name:");
-        TextField lastNameField = new TextField("User");
+        Label usernameLabel = new Label("Username:");
+        TextField usernameField = new TextField(username);
         
         Label emailLabel = new Label("Email:");
-        TextField emailField = new TextField("admin@example.com");
-        
-        Label phoneLabel = new Label("Phone:");
-        TextField phoneField = new TextField("+1 555-123-4567");
-        
-        Label timeZoneLabel = new Label("Time Zone:");
-        ComboBox<String> timeZoneField = new ComboBox<>();
-        timeZoneField.getItems().addAll("UTC", "UTC-8 (PST)", "UTC-5 (EST)", "UTC+1 (CET)", "UTC+8 (CST)");
-        timeZoneField.setValue("UTC");
-        
-        Label languageLabel = new Label("Language:");
-        ComboBox<String> languageField = new ComboBox<>();
-        languageField.getItems().addAll("English", "Spanish", "French", "German", "Chinese");
-        languageField.setValue("English");
+        TextField emailField = new TextField(email);
         
         // Position form fields
-        formGrid.add(firstNameLabel, 0, 0);
-        formGrid.add(firstNameField, 1, 0);
-        formGrid.add(lastNameLabel, 0, 1);
-        formGrid.add(lastNameField, 1, 1);
-        formGrid.add(emailLabel, 0, 2);
-        formGrid.add(emailField, 1, 2);
-        formGrid.add(phoneLabel, 0, 3);
-        formGrid.add(phoneField, 1, 3);
-        formGrid.add(timeZoneLabel, 0, 4);
-        formGrid.add(timeZoneField, 1, 4);
-        formGrid.add(languageLabel, 0, 5);
-        formGrid.add(languageField, 1, 5);
+        formGrid.add(usernameLabel, 0, 0);
+        formGrid.add(usernameField, 1, 0);
+        formGrid.add(emailLabel, 0, 1);
+        formGrid.add(emailField, 1, 1);
         
         // Action buttons
         HBox actionButtons = new HBox(10);
@@ -105,31 +53,28 @@ public class AdminProfilePage {
         actionButtons.setAlignment(Pos.CENTER_RIGHT);
         
         Button saveProfileBtn = new Button("Save Changes");
-        saveProfileBtn.getStyleClass().add("primary-button");
+        saveProfileBtn.setStyle("-fx-background-color: #007bff; -fx-text-fill: white;");
+        saveProfileBtn.setOnAction(e -> {
+            username = usernameField.getText();
+            email = emailField.getText();
+            nameLabel.setText(username);
+            showAlert(AlertType.INFORMATION, "Success", "Profile saved successfully!");
+        });
         
         Button resetBtn = new Button("Reset");
-        resetBtn.getStyleClass().add("secondary-button");
+        resetBtn.setOnAction(e -> {
+            usernameField.setText(username);
+            emailField.setText(email);
+        });
         
         actionButtons.getChildren().addAll(resetBtn, saveProfileBtn);
         
-        profileDetails.getChildren().addAll(detailsTitle, formGrid, actionButtons);
-        
-        profileSection.getChildren().addAll(profileBasics, profileDetails);
-        
-        // Security section
-        VBox securitySection = new VBox(15);
-        securitySection.setPadding(new Insets(20));
-        securitySection.getStyleClass().add("security-section");
-        
-        Label securityTitle = new Label("Security Settings");
-        securityTitle.getStyleClass().add("section-title");
-        
-        // Password change
+        // Password change section
         VBox passwordChange = new VBox(10);
-        passwordChange.setPadding(new Insets(0, 0, 20, 0));
+        passwordChange.setPadding(new Insets(20, 0, 0, 0));
         
         Label passwordTitle = new Label("Change Password");
-        passwordTitle.getStyleClass().add("subsection-title");
+        passwordTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
         
         PasswordField currentPasswordField = new PasswordField();
         currentPasswordField.setPromptText("Current Password");
@@ -141,86 +86,47 @@ public class AdminProfilePage {
         confirmPasswordField.setPromptText("Confirm New Password");
         
         Button changePasswordBtn = new Button("Update Password");
-        changePasswordBtn.getStyleClass().add("primary-button");
+        changePasswordBtn.setStyle("-fx-background-color: #007bff; -fx-text-fill: white;");
+        changePasswordBtn.setOnAction(e -> {
+            if (currentPasswordField.getText().isEmpty() || 
+                newPasswordField.getText().isEmpty() || 
+                confirmPasswordField.getText().isEmpty()) {
+                showAlert(AlertType.ERROR, "Error", "All password fields are required.");
+                return;
+            }
+            
+            if (!newPasswordField.getText().equals(confirmPasswordField.getText())) {
+                showAlert(AlertType.ERROR, "Error", "New passwords do not match.");
+                return;
+            }
+            
+            showAlert(AlertType.INFORMATION, "Success", "Password updated successfully!");
+            currentPasswordField.clear();
+            newPasswordField.clear();
+            confirmPasswordField.clear();
+        });
         
-        passwordChange.getChildren().addAll(
-            passwordTitle,
-            currentPasswordField,
-            newPasswordField,
-            confirmPasswordField,
+        profileSection.getChildren().addAll(
+            nameLabel, 
+            formGrid, 
+            actionButtons, 
+            passwordTitle, 
+            currentPasswordField, 
+            newPasswordField, 
+            confirmPasswordField, 
             changePasswordBtn
         );
         
-        // Two-factor authentication
-        VBox twoFactorAuth = new VBox(10);
-        
-        Label twoFactorTitle = new Label("Two-Factor Authentication");
-        twoFactorTitle.getStyleClass().add("subsection-title");
-        
-        CheckBox enableTwoFactor = new CheckBox("Enable two-factor authentication");
-        enableTwoFactor.setSelected(true);
-        
-        Button configureTwoFactor = new Button("Configure 2FA");
-        configureTwoFactor.getStyleClass().add("secondary-button");
-        
-        twoFactorAuth.getChildren().addAll(twoFactorTitle, enableTwoFactor, configureTwoFactor);
-        
-        securitySection.getChildren().addAll(securityTitle, passwordChange, twoFactorAuth);
-        
-        // Activity log section
-        VBox activitySection = new VBox(15);
-        activitySection.setPadding(new Insets(20));
-        activitySection.getStyleClass().add("activity-section");
-        
-        HBox activityHeader = new HBox();
-        activityHeader.setAlignment(Pos.CENTER_LEFT);
-        
-        Label activityTitle = new Label("Recent Account Activity");
-        activityTitle.getStyleClass().add("section-title");
-        
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        
-        Button viewAllActivityBtn = new Button("View All");
-        viewAllActivityBtn.getStyleClass().add("text-button");
-        
-        activityHeader.getChildren().addAll(activityTitle, spacer, viewAllActivityBtn);
-        
-        // Activity list
-        VBox activityList = new VBox(8);
-        activityList.getChildren().addAll(
-            createActivityLogItem("Login successful", "Today, 14:25 PM", "192.168.1.105"),
-            createActivityLogItem("Password changed", "June 18, 2023 10:30 AM", "192.168.1.105"),
-            createActivityLogItem("Login successful", "June 18, 2023 10:15 AM", "192.168.1.105"),
-            createActivityLogItem("Login successful", "June 17, 2023 09:45 AM", "10.0.15.25")
-        );
-        
-        activitySection.getChildren().addAll(activityHeader, activityList);
-        
-        view.getChildren().addAll(title, profileSection, securitySection, activitySection);
+        // Add all sections to main view
+        view.getChildren().addAll(title, profileSection);
         return view;
     }
     
-    private HBox createActivityLogItem(String activity, String time, String ipAddress) {
-        HBox item = new HBox();
-        item.setPadding(new Insets(10));
-        item.getStyleClass().add("activity-log-item");
-        
-        VBox details = new VBox(5);
-        Label activityLabel = new Label(activity);
-        activityLabel.getStyleClass().add("activity-log-action");
-        
-        HBox metaInfo = new HBox(15);
-        Label timeLabel = new Label("Time: " + time);
-        timeLabel.getStyleClass().add("activity-log-meta");
-        
-        Label ipLabel = new Label("IP: " + ipAddress);
-        ipLabel.getStyleClass().add("activity-log-meta");
-        
-        metaInfo.getChildren().addAll(timeLabel, ipLabel);
-        details.getChildren().addAll(activityLabel, metaInfo);
-        
-        item.getChildren().add(details);
-        return item;
+    private void showAlert(AlertType alertType, String title, String message) {
+        Alert alert = new Alert(alertType);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 }

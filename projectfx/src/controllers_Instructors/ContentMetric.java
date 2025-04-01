@@ -1,4 +1,4 @@
-package controllers_Insructrors;
+package controllers_Instructors;
 
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;

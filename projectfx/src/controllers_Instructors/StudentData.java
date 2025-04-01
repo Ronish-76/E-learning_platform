@@ -1,4 +1,4 @@
-package controllers_Insructrors;
+package controllers_Instructors;
 
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;

@@ -1,4 +1,4 @@
-package controllers_Insructrors;
+package controllers_Instructors;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;

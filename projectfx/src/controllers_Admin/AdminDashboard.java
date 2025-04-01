@@ -7,9 +7,10 @@ import javafx.geometry.*;
 import javafx.scene.*;
 import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
 import javafx.stage.*;
 import javafx.util.Duration;
 import javafx.application.Platform;
@@ -23,7 +24,7 @@ public class AdminDashboard extends Application {
     private VBox mainContent;
     private VBox leftSidebar;
     private Button activeButton = null;
-    private String currentUsername = "Admin User";
+    private String currentUsername = "Profile";
 
     @Override
     public void start(Stage primaryStage) {
@@ -113,37 +114,32 @@ public class AdminDashboard extends Application {
         navTitle.getStyleClass().add("nav-section-title");
         navTitle.setPadding(new Insets(20, 0, 10, 0));
         
-        // Create buttons with corresponding actions
-        Button dashboardBtn = createSidebarButton("Dashboard", "dashboard_icon.png",
+        // Create buttons with the correct icon names from your resources folder
+        Button dashboardBtn = createSidebarButton("Home", "home_icon.png",
                 () -> loadContent(new DashboardOverview().getView()));
-        Button usersBtn = createSidebarButton("User Management", "users_icon.png",
+        Button usersBtn = createSidebarButton("User Management", "user_icon.png",
                 () -> loadContent(new UserManagementPage().getView()));
-        Button coursesBtn = createSidebarButton("Course Management", "courses_admin_icon.png",
+        Button coursesBtn = createSidebarButton("Course Management", "course_icon.png",
                 () -> loadContent(new CourseManagementPage().getView()));
-        Button reportsBtn = createSidebarButton("Reports & Analytics", "reports_icon.png",
+        Button reportsBtn = createSidebarButton("Reports & Analytics", "report_icon.png",
                 () -> loadContent(new ReportsPage().getView()));
                 
         // Set dashboard as active by default
         setActiveButton(dashboardBtn);
-        
-        // System section
-        Label systemTitle = new Label("SYSTEM");
-        systemTitle.getStyleClass().add("nav-section-title");
-        systemTitle.setPadding(new Insets(20, 0, 10, 0));
-        
-        Button settingsBtn = createSidebarButton("Settings", "settings_icon.png",
-                () -> loadContent(new SettingsPage().getView()));
-        Button logsBtn = createSidebarButton("System Logs", "logs_icon.png",
-                () -> loadContent(new SystemLogsPage().getView()));
                 
         Separator separator = new Separator();
         separator.getStyleClass().add("sidebar-separator");
         separator.setPadding(new Insets(15, 0, 15, 0));
         
-        // Logout button
-        Button logoutBtn = createSidebarButton("Logout", "logout_icon.png",
-                () -> showLogoutConfirmation(primaryStage));
+        // Logout button - plain button without icon
+        Button logoutBtn = new Button("Logout");
+        logoutBtn.getStyleClass().add("sidebar-button");
         logoutBtn.getStyleClass().add("logout-button");
+        logoutBtn.setPrefWidth(200);
+        logoutBtn.setMaxWidth(Double.MAX_VALUE);
+        logoutBtn.setAlignment(Pos.BASELINE_LEFT);
+        logoutBtn.setPadding(new Insets(12, 15, 12, 15));
+        logoutBtn.setOnAction(_ -> showLogoutConfirmation(primaryStage));
         
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
@@ -155,9 +151,6 @@ public class AdminDashboard extends Application {
             usersBtn,
             coursesBtn,
             reportsBtn,
-            systemTitle,
-            settingsBtn,
-            logsBtn,
             spacer,
             separator,
             logoutBtn
@@ -189,18 +182,28 @@ public class AdminDashboard extends Application {
         Button button = new Button(text);
         button.getStyleClass().add("sidebar-button");
         
-        // In a real app, you'd have proper icon handling
-        // For this example, we'll create a placeholder icon
+        // Try to load icon directly from the resources folder shown in the file explorer
         try {
-            // Create the icon - using a placeholder instead of file path
-            Rectangle iconPlaceholder = new Rectangle(20, 20);
-            iconPlaceholder.setFill(Color.WHITE);
-            iconPlaceholder.setOpacity(0.7);
+            // First try with the exact name from your resources folder
+            String iconPath = "/images/" + iconFileName;
+            URL iconUrl = getClass().getResource(iconPath);
             
-            // Set the button style and icon
-            button.setGraphic(iconPlaceholder);
+            // If not found with direct path, try with resources prefix
+            if (iconUrl == null) {
+                iconPath = "/resources/images/" + iconFileName;
+                iconUrl = getClass().getResource(iconPath);
+            }
+            
+            if (iconUrl != null) {
+                Image icon = new Image(iconUrl.toExternalForm(), 20, 20, true, true);
+                ImageView iconView = new ImageView(icon);
+                button.setGraphic(iconView);
+            } else {
+                System.out.println("Icon not found: " + iconFileName);
+                // Use a default icon or no icon
+            }
         } catch (Exception e) {
-            System.out.println("Using placeholder for icon: " + iconFileName);
+            System.out.println("Error loading icon " + iconFileName + ": " + e.getMessage());
         }
         
         button.setPrefWidth(200);
@@ -234,36 +237,28 @@ public class AdminDashboard extends Application {
         topSection.getStyleClass().add("top-header");
         topSection.setAlignment(Pos.CENTER_LEFT);
         
-        // Create hamburger menu button for mobile view
-        Button menuBtn = new Button("≡");
-        menuBtn.getStyleClass().add("hamburger-menu");
-        
         Label dashboardLabel = new Label("Admin Dashboard");
         dashboardLabel.getStyleClass().add("dashboard-title");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
+     
+        // Create a completely new profile button without any circle styling
+        Label usernameLabel = new Label(currentUsername);
+        usernameLabel.getStyleClass().add("username-label");
         
-        // Notifications button
-        Button notifBtn = new Button("🔔");
-        notifBtn.getStyleClass().add("header-icon-button");
-        notifBtn.setTooltip(new Tooltip("Notifications"));
-        
-        // Alert count indicator
-        Label alertCount = new Label("3");
-        alertCount.getStyleClass().add("alert-count");
-        
-        StackPane notifContainer = new StackPane();
-        notifContainer.getChildren().addAll(notifBtn, alertCount);
-        StackPane.setAlignment(alertCount, Pos.TOP_RIGHT);
-        
-        // Profile Button with username
-        Button profileBtn = new Button(currentUsername);
-        profileBtn.getStyleClass().add("profile-button");
+        // Create a standard button for profile access
+        Button profileBtn = new Button();
+        profileBtn.getStyleClass().add("text-button"); // Use a clean style without any circle
+        profileBtn.setGraphic(usernameLabel);
+        profileBtn.setBackground(Background.EMPTY); // Remove any background
+        profileBtn.setBorder(Border.EMPTY); // Remove any border
+        profileBtn.setPadding(new Insets(5, 10, 5, 10)); // Add some padding
+        profileBtn.setCursor(Cursor.HAND); // Show hand cursor on hover
         profileBtn.setTooltip(new Tooltip("Admin Profile"));
         profileBtn.setOnAction(_ -> loadContent(new AdminProfilePage().getView()));
         
-        topSection.getChildren().addAll(menuBtn, dashboardLabel, spacer, notifContainer, profileBtn);
+        topSection.getChildren().addAll(dashboardLabel, spacer, profileBtn);
         
         // Add drop shadow to the top section
         DropShadow dropShadow = new DropShadow();

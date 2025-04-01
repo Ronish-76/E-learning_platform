@@ -19,7 +19,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import controllers_Admin.AdminDashboard;
-import controllers_Insructrors.InstructorDashboard;
+import controllers_Instructors.InstructorDashboard;
 import dao.DatabaseConnection;
 
 public class Login extends Application {

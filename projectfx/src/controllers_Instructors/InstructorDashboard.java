@@ -1,12 +1,15 @@
-package controllers_Insructrors;
+package controllers_Instructors;
 
 import java.net.URL;
+
+import controllers_Instructor.InstructorProfilePage;
 import javafx.animation.TranslateTransition;
 import javafx.application.Application;
 import javafx.geometry.*;
 import javafx.scene.*;
 import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
@@ -23,7 +26,7 @@ public class InstructorDashboard extends Application {
     private VBox mainContent;
     private VBox leftSidebar;
     private Button activeButton = null;
-    private String currentUsername = "Jane Instructor";
+    private String currentUsername = "Profile";
 
     @Override
     public void start(Stage primaryStage) {
@@ -114,41 +117,23 @@ public class InstructorDashboard extends Application {
         navTitle.setPadding(new Insets(20, 0, 10, 0));
         
         // Create buttons with corresponding actions
-        Button dashboardBtn = createSidebarButton("Dashboard", "dashboard_icon.png", 
+        Button dashboardBtn = createSidebarButton("Home", "home_icon.png", 
                 () -> loadContent(new DashboardOverview().getView()));
-        Button coursesBtn = createSidebarButton("My Courses", "courses_icon.png", 
+        Button coursesBtn = createSidebarButton("My Courses", "course_icon.png", 
                 () -> loadContent(new MyCourses().getView()));
-        Button assignmentsBtn = createSidebarButton("Assignments", "assignments_icon.png", 
+        Button assignmentsBtn = createSidebarButton("Assignments", "assignment_icon.png", 
                 () -> loadContent(new AssignmentPage().getView()));
         Button quizzesBtn = createSidebarButton("Quizzes", "quiz_icon.png", 
                 () -> loadContent(new QuizzesPage().getView()));
-        Button studentsBtn = createSidebarButton("Students", "students_icon.png", 
+        Button studentsBtn = createSidebarButton("Students", "user_icon.png", 
                 () -> loadContent(new StudentsPage().getView()));
                 
         // Set dashboard as active by default
         setActiveButton(dashboardBtn);
-        
-        // Content section
-        Label contentTitle = new Label("CONTENT");
-        contentTitle.getStyleClass().add("nav-section-title");
-        contentTitle.setPadding(new Insets(20, 0, 10, 0));
-        
-        Button materialsBtn = createSidebarButton("Course Materials", "materials_icon.png", 
-                () -> loadContent(new CourseContentPage().getView()));
-        Button analyticsBtn = createSidebarButton("Analytics", "analytics_icon.png", 
-                () -> loadContent(new AnalyticsPage().getView()));
-        Button messagesBtn = createSidebarButton("Messages", "messages_icon.png", 
-                () -> loadContent(new MessagesPage().getView()));
-                
-        Separator separator = new Separator();
-        separator.getStyleClass().add("sidebar-separator");
-        separator.setPadding(new Insets(15, 0, 15, 0));
-        
-        // Logout button
-        Button logoutBtn = createSidebarButton("Logout", "logout_icon.png", 
-                () -> showLogoutConfirmation(primaryStage));
-        logoutBtn.getStyleClass().add("logout-button");
-        
+
+        // Logout button with matching style
+        Button logoutBtn = createLogoutButton(primaryStage);
+
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
         
@@ -160,16 +145,41 @@ public class InstructorDashboard extends Application {
             assignmentsBtn, 
             quizzesBtn,
             studentsBtn,
-            contentTitle,
-            materialsBtn,
-            analyticsBtn,
-            messagesBtn,
             spacer,
-            separator,
             logoutBtn
         );
         
         return sidebar;
+    }
+
+    private Button createLogoutButton(Stage primaryStage) {
+        Button logoutBtn = new Button("Logout");
+        logoutBtn.getStyleClass().add("sidebar-button");  
+        
+        // Try to load logout icon
+        try {
+            URL iconUrl = getClass().getResource("/images/logout_icon.png");  
+            if (iconUrl != null) {
+                ImageView icon = new ImageView(iconUrl.toExternalForm());
+                icon.setFitHeight(20);
+                icon.setFitWidth(20);
+                logoutBtn.setGraphic(icon);
+            }
+        } catch (Exception e) {
+            System.out.println("Error loading logout icon");
+        }
+        
+        // Additional styling specific to logout button
+        logoutBtn.setStyle("-fx-text-fill: #e74c3c;");  // Red text for logout
+        
+        logoutBtn.setPrefWidth(200);
+        logoutBtn.setMaxWidth(Double.MAX_VALUE);
+        logoutBtn.setAlignment(Pos.BASELINE_LEFT);
+        logoutBtn.setPadding(new Insets(12, 15, 12, 15));
+        
+        logoutBtn.setOnAction(_ -> showLogoutConfirmation(primaryStage));
+        
+        return logoutBtn;
     }
 
     private void showLogoutConfirmation(Stage primaryStage) {
@@ -195,18 +205,30 @@ public class InstructorDashboard extends Application {
         Button button = new Button(text);
         button.getStyleClass().add("sidebar-button");
         
-        // In a real app, you'd have proper icon handling
-        // For this example, we'll create a placeholder icon
         try {
-            // Create the icon - using a placeholder instead of file path
+            // Load the image from resources directory
+            URL iconUrl = getClass().getResource("/images/" + iconFileName);
+            if (iconUrl != null) {
+                ImageView icon = new ImageView(iconUrl.toExternalForm());
+                icon.setFitHeight(20);
+                icon.setFitWidth(20);
+                button.setGraphic(icon);
+            } else {
+                System.out.println("Icon not found: " + iconFileName);
+                // Create a placeholder if icon not found
+                Rectangle iconPlaceholder = new Rectangle(20, 20);
+                iconPlaceholder.setFill(Color.WHITE);
+                iconPlaceholder.setOpacity(0.7);
+                button.setGraphic(iconPlaceholder);
+            }
+        } catch (Exception e) {
+            System.out.println("Error loading icon: " + iconFileName);
+            e.printStackTrace();
+            // Create a placeholder if exception occurs
             Rectangle iconPlaceholder = new Rectangle(20, 20);
             iconPlaceholder.setFill(Color.WHITE);
             iconPlaceholder.setOpacity(0.7);
-            
-            // Set the button style and icon
             button.setGraphic(iconPlaceholder);
-        } catch (Exception e) {
-            System.out.println("Using placeholder for icon: " + iconFileName);
         }
         
         button.setPrefWidth(200);
@@ -239,37 +261,34 @@ public class InstructorDashboard extends Application {
         topSection.setPadding(new Insets(15, 25, 15, 25));
         topSection.getStyleClass().add("top-header");
         topSection.setAlignment(Pos.CENTER_LEFT);
-        
-        // Create hamburger menu button for mobile view
-        Button menuBtn = new Button("≡");
-        menuBtn.getStyleClass().add("hamburger-menu");
-        
+
         Label dashboardLabel = new Label("Instructor Dashboard");
         dashboardLabel.getStyleClass().add("dashboard-title");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        // Notifications button
-        Button notifBtn = new Button("🔔");
-        notifBtn.getStyleClass().add("header-icon-button");
-        notifBtn.setTooltip(new Tooltip("Notifications"));
-        
-        // Alert count indicator
-        Label alertCount = new Label("5");
-        alertCount.getStyleClass().add("alert-count");
-        
-        StackPane notifContainer = new StackPane();
-        notifContainer.getChildren().addAll(notifBtn, alertCount);
-        StackPane.setAlignment(alertCount, Pos.TOP_RIGHT);
-        
         // Profile Button with username
         Button profileBtn = new Button(currentUsername);
         profileBtn.getStyleClass().add("profile-button");
         profileBtn.setTooltip(new Tooltip("Instructor Profile"));
+        
+        // Add profile icon to profile button
+        try {
+            URL profileIconUrl = getClass().getResource("/images/profile_icon.png");
+            if (profileIconUrl != null) {
+                ImageView profileIcon = new ImageView(profileIconUrl.toExternalForm());
+                profileIcon.setFitHeight(24);
+                profileIcon.setFitWidth(24);
+                profileBtn.setGraphic(profileIcon);
+            }
+        } catch (Exception e) {
+            System.out.println("Error loading profile icon");
+        }
+        
         profileBtn.setOnAction(_ -> loadContent(new InstructorProfilePage().getView()));
         
-        topSection.getChildren().addAll(menuBtn, dashboardLabel, spacer, notifContainer, profileBtn);
+        topSection.getChildren().addAll(dashboardLabel, spacer, profileBtn);
         
         // Add drop shadow to the top section
         DropShadow dropShadow = new DropShadow();

@@ -116,7 +116,7 @@ public class Dashboard_S extends Application {
             userInfoLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px;");
             userInfoLabel.setPadding(new Insets(0, 0, 20, 0));
             sidebar.getChildren().add(userInfoLabel);
-        }
+        } 
         
         // Navigation section title
         Label navTitle = new Label("NAVIGATION");
