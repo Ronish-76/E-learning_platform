@@ -38,7 +38,7 @@ public class HomePage {
     private final Color TEXT_SECONDARY = Color.web("#5f6368");
     
     // Current user
-    private User currentUser;
+    private User currentUser; 
     private int currentUserId = 0;
     
     // Class data from database
@@ -216,18 +216,12 @@ public class HomePage {
         );
         
         VBox announcement2 = createAnnouncement(
-            "System Maintenance",
-            "Our platform will undergo routine maintenance this weekend. Some features may be temporarily unavailable.",
-            "1 week ago"
-        );
-        
-        VBox announcement3 = createAnnouncement(
             "Welcome to Our Platform",
             "Thank you for joining our e-learning platform. We're excited to have you with us!",
-            "2 weeks ago"
+            "2 days ago"
         );
         
-        announcements.getChildren().addAll(announcement1, new Separator(), announcement2, new Separator(), announcement3);
+        announcements.getChildren().addAll(announcement1, new Separator(), announcement2);
         
         // Add a drop shadow effect
         DropShadow dropShadow = new DropShadow();

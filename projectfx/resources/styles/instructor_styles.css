@@ -56,6 +56,11 @@
     -fx-padding: 0 0 20px 0;
 }
 
+.table-view .column-header .label {
+    -fx-text-fill: black;
+    -fx-font-weight: bold;
+}
+
 .sidebar-separator {
     -fx-background-color: #34495e;
     -fx-opacity: 0.7;

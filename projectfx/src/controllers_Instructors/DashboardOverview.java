@@ -1,357 +1,482 @@
 package controllers_Instructors;
 
+import dao.DatabaseConnection;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import controllers_students.Login;
+import controllers_students.User;
+
+import java.sql.*;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 /**
- * Dashboard Overview page showing key metrics and statistics
+ * Dashboard Overview page showing key metrics and statistics from database
  */
 public class DashboardOverview {
-    private String currentUsername = "Jane Instructor";
+    // Constants for UI styling
+    private static final String BACKGROUND_COLOR = "#f5f7fa";
+    private static final String PRIMARY_COLOR = "#3498db";
+    private static final String SECONDARY_COLOR = "#2ecc71";
+    private static final String DANGER_COLOR = "#e74c3c";
     
+    // Data counts
+    private int totalCourses = 0;
+    private int totalStudents = 0;
+    private int totalAssignments = 0;
+    
+    // Current user data
+    private int userID = 0;
+    private String currentUsername = "Instructor";
+    private boolean isLoggedIn = false;
+    
+    /**
+     * Constructor
+     */
+    public DashboardOverview() {
+        // Load user data from login session
+        loadUserDataFromLogin();
+        
+        // Load basic counts from database
+        loadBasicCounts();
+    }
+    
+    /**
+     * Load user data from the Login class
+     */
+    private void loadUserDataFromLogin() {
+        // Get the logged-in user from Login class
+        User loggedInUser = Login.getLoggedInUser();
+        
+        if (loggedInUser != null && "Instructor".equals(loggedInUser.getRole())) {
+            // User is logged in as instructor
+            this.isLoggedIn = true;
+            this.userID = loggedInUser.getUserID();
+            this.currentUsername = loggedInUser.getUsername();
+            System.out.println("Dashboard loaded user data for: " + currentUsername + " (ID: " + userID + ")");
+        } else {
+            // Not logged in or not an instructor, try to get any instructor
+            loadInstructorName();
+        }
+    }
+    
+    /**
+     * Load basic counts from database
+     */
+    private void loadBasicCounts() {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            if (conn == null) {
+                System.out.println("Database connection is null");
+                return;
+            }
+            
+            // Count total courses
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery("SELECT COUNT(*) as count FROM Courses")) {
+                if (rs.next()) {
+                    totalCourses = rs.getInt("count");
+                    System.out.println("Loaded " + totalCourses + " courses from database");
+                }
+            } catch (SQLException e) {
+                System.out.println("Error counting courses: " + e.getMessage());
+            }
+            
+            // Count total students
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery("SELECT COUNT(*) as count FROM Students")) {
+                if (rs.next()) {
+                    totalStudents = rs.getInt("count");
+                    System.out.println("Loaded " + totalStudents + " students from database");
+                }
+            } catch (SQLException e) {
+                System.out.println("Error counting students: " + e.getMessage());
+            }
+            
+            // Count total assignments
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery("SELECT COUNT(*) as count FROM Assignments")) {
+                if (rs.next()) {
+                    totalAssignments = rs.getInt("count");
+                    System.out.println("Loaded " + totalAssignments + " assignments from database");
+                }
+            } catch (SQLException e) {
+                System.out.println("Error counting assignments: " + e.getMessage());
+            }
+        } catch (SQLException e) {
+            System.out.println("Database connection error: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Try to load any instructor name if no logged-in user
+     */
+    private void loadInstructorName() {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            if (conn == null) return;
+            
+            // Get first instructor name
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(
+                     "SELECT u.userID, u.username FROM Users u " +
+                     "JOIN Instructor i ON u.userID = i.userID " +
+                     "LIMIT 1")) {
+                if (rs.next()) {
+                    this.userID = rs.getInt("userID");
+                    this.currentUsername = rs.getString("username");
+                    System.out.println("Loaded default instructor name: " + currentUsername);
+                }
+            } catch (SQLException e) {
+                System.out.println("Error loading instructor name: " + e.getMessage());
+            }
+        } catch (SQLException e) {
+            System.out.println("Database connection error in loadInstructorName: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Main method to create and return the dashboard view
+     */
     public Node getView() {
         VBox view = new VBox(20);
-        view.getStyleClass().add("page-content");
+        view.setPadding(new Insets(20));
+        view.setStyle("-fx-background-color: " + BACKGROUND_COLOR + ";");
         
+        // Page title
         Label title = new Label("Instructor Dashboard");
-        title.getStyleClass().add("page-title");
+        title.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: black;");
         
-        // Welcome message with date
+        // Login status indicator - only show if not logged in
+        if (!isLoggedIn) {
+            Label loginStatus = new Label("Note: You are viewing default data. Please log in for personalized dashboard.");
+            loginStatus.setStyle("-fx-text-fill: " + DANGER_COLOR + "; -fx-font-style: italic;");
+            view.getChildren().add(loginStatus);
+        }
+        
+        // Welcome message with current date
+        HBox welcomeBox = createWelcomeSection();
+        
+        // Stats cards - basic information from database
+        HBox statsCards = createStatsSection();
+        
+        // Add all components to main view
+        view.getChildren().add(title);
+        view.getChildren().add(welcomeBox);
+        view.getChildren().add(statsCards);
+        
+        // Add course section if available
+        VBox courseSection = createCourseSection();
+        if (courseSection != null) {
+            view.getChildren().add(courseSection);
+        }
+        
+        // Add assignments section if available
+        VBox assignmentSection = createAssignmentSection();
+        if (assignmentSection != null) {
+            view.getChildren().add(assignmentSection);
+        }
+        
+        // Note: "Create Quick Action Buttons" section has been removed
+        
+        return view;
+    }
+    
+    /**
+     * Create welcome section with current date
+     */
+    private HBox createWelcomeSection() {
         HBox welcomeBox = new HBox();
         welcomeBox.setPadding(new Insets(0, 0, 10, 0));
         
         VBox welcomeMsg = new VBox(5);
         Label greeting = new Label("Welcome back, " + currentUsername + "!");
-        greeting.getStyleClass().add("welcome-message");
+        greeting.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: black;");
         
-        Label dateLabel = new Label("Today is June 21, 2023");
-        dateLabel.getStyleClass().add("date-message");
+        // Get current date formatted
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("MMMM d, yyyy"));
+        Label dateLabel = new Label("Today is " + today);
+        dateLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #7f8c8d;");
         
-        welcomeMsg.getChildren().addAll(greeting, dateLabel);
+        // Add user ID if logged in (for debugging/verification)
+        if (isLoggedIn && userID > 0) {
+            Label userIdLabel = new Label("User ID: " + userID);
+            userIdLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #bdc3c7;");
+            welcomeMsg.getChildren().addAll(greeting, dateLabel, userIdLabel);
+        } else {
+            welcomeMsg.getChildren().addAll(greeting, dateLabel);
+        }
+        
         welcomeBox.getChildren().add(welcomeMsg);
-        
-        // Quick stats section
-        HBox statsContainer = createStatsSection();
-        statsContainer.getStyleClass().add("stats-container");
-        
-        // To-do list section
-        VBox todoSection = createTodoSection();
-        todoSection.getStyleClass().add("todo-section");
-        
-        // Course progress section
-        VBox courseProgressSection = createCourseProgressSection();
-        courseProgressSection.getStyleClass().add("course-progress-section");
-        
-        // Upcoming deadlines section
-        VBox upcomingDeadlines = createUpcomingDeadlinesSection();
-        upcomingDeadlines.getStyleClass().add("deadlines-section");
-        
-        // Recent student activity
-        VBox recentActivity = createRecentActivitySection();
-        recentActivity.getStyleClass().add("activity-section");
-        
-        // Quick actions section
-        HBox quickActions = createQuickActionButtons();
-        quickActions.getStyleClass().add("actions-container");
-        
-        // Create a horizontal container for course progress and deadlines
-        HBox progressDeadlinesContainer = new HBox(20, courseProgressSection, upcomingDeadlines);
-        HBox.setHgrow(progressDeadlinesContainer, Priority.ALWAYS);
-        
-        // Combine all sections
-        view.getChildren().addAll(
-            title,
-            welcomeBox,
-            statsContainer,
-            todoSection,
-            progressDeadlinesContainer,
-            recentActivity,
-            quickActions
-        );
-        
-        return view;
+        return welcomeBox;
     }
     
+    /**
+     * Create stats section with basic counts
+     */
     private HBox createStatsSection() {
         HBox container = new HBox(15);
         container.setPadding(new Insets(10));
         container.setAlignment(Pos.CENTER);
+        container.setStyle("-fx-background-color: white; -fx-background-radius: 8px; -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 5, 0, 0, 2);");
         
-        // Create stat cards
-        VBox coursesCard = createStatCard("Courses", "5", "3 active, 2 draft", "courses-stat");
-        VBox studentsCard = createStatCard("Students", "248", "+12 this month", "students-stat");
-        VBox assignmentsCard = createStatCard("Assignments", "18", "4 pending review", "assignments-stat");
-        VBox ratingsCard = createStatCard("Avg. Rating", "4.8", "from 156 reviews", "ratings-stat");
+        // Create stat cards for courses, students, and assignments
+        VBox coursesCard = createStatCard("Courses", String.valueOf(totalCourses), 
+                                         "Total courses", PRIMARY_COLOR);
+        VBox studentsCard = createStatCard("Students", String.valueOf(totalStudents), 
+                                          "Total students", SECONDARY_COLOR);
+        VBox assignmentsCard = createStatCard("Assignments", String.valueOf(totalAssignments), 
+                                             "Total assignments", DANGER_COLOR);
         
-        container.getChildren().addAll(coursesCard, studentsCard, assignmentsCard, ratingsCard);
+        container.getChildren().addAll(coursesCard, studentsCard, assignmentsCard);
         HBox.setHgrow(coursesCard, Priority.ALWAYS);
         HBox.setHgrow(studentsCard, Priority.ALWAYS);
         HBox.setHgrow(assignmentsCard, Priority.ALWAYS);
-        HBox.setHgrow(ratingsCard, Priority.ALWAYS);
         
         return container;
     }
     
-    private VBox createStatCard(String title, String value, String subtitle, String styleClass) {
+    /**
+     * Create a basic stat card
+     */
+    private VBox createStatCard(String title, String value, String subtitle, String color) {
         VBox card = new VBox(5);
         card.setPadding(new Insets(20));
-        card.getStyleClass().addAll("stat-card", styleClass);
+        card.setAlignment(Pos.CENTER);
+        card.setStyle("-fx-background-color: white; -fx-border-color: " + color + "; -fx-border-width: 0 0 0 4; -fx-border-radius: 4;");
         
         Label titleLabel = new Label(title);
-        titleLabel.getStyleClass().add("stat-title");
+        titleLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #7f8c8d;");
         
         Label valueLabel = new Label(value);
-        valueLabel.getStyleClass().add("stat-value");
+        valueLabel.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: black;");
         
         Label subtitleLabel = new Label(subtitle);
-        subtitleLabel.getStyleClass().add("stat-subtitle");
+        subtitleLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #95a5a6;");
         
         card.getChildren().addAll(titleLabel, valueLabel, subtitleLabel);
-        
-        // Add hover effect
-        card.setOnMouseEntered(e -> card.getStyleClass().add("stat-card-hover"));
-        card.setOnMouseExited(e -> card.getStyleClass().remove("stat-card-hover"));
-        
         return card;
     }
     
-    private VBox createTodoSection() {
-        VBox container = new VBox(10);
-        container.setPadding(new Insets(20));
-        container.getStyleClass().add("todo-container");
-        
-        HBox header = new HBox();
-        header.setAlignment(Pos.CENTER_LEFT);
-        
-        Label title = new Label("To-Do List");
-        title.getStyleClass().add("section-title");
-        
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        
-        Button addTaskBtn = new Button("+ Add Task");
-        addTaskBtn.getStyleClass().add("add-task-button");
-        
-        header.getChildren().addAll(title, spacer, addTaskBtn);
-        
-        // Todo items
-        VBox todoList = new VBox(5);
-        todoList.getChildren().addAll(
-            createTodoItem("Review assignment submissions for 'Introduction to Python'", true),
-            createTodoItem("Prepare lecture materials for next week", false),
-            createTodoItem("Grade final projects for 'Web Development'", false),
-            createTodoItem("Update course syllabus for next semester", false),
-            createTodoItem("Respond to student forum questions", true)
-        );
-        
-        container.getChildren().addAll(header, todoList);
-        return container;
-    }
-    
-    private HBox createTodoItem(String task, boolean highPriority) {
-        HBox item = new HBox(10);
-        item.setPadding(new Insets(8));
-        item.getStyleClass().add("todo-item");
-        
-        CheckBox checkbox = new CheckBox();
-        
-        Label taskLabel = new Label(task);
-        taskLabel.setWrapText(true);
-        HBox.setHgrow(taskLabel, Priority.ALWAYS);
-        
-        if (highPriority) {
-            Label priorityLabel = new Label("High Priority");
-            priorityLabel.getStyleClass().add("priority-label");
-            item.getChildren().addAll(checkbox, taskLabel, priorityLabel);
-        } else {
-            item.getChildren().addAll(checkbox, taskLabel);
+    /**
+     * Create course section with data from database
+     */
+    private VBox createCourseSection() {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            if (conn == null) return null;
+            
+            // Check if there are any courses
+            String countQuery = "SELECT COUNT(*) as count FROM Courses";
+            if (isLoggedIn) {
+                // If user is logged in, try to show only their courses
+                // This is a simplified query - you'd need an actual relationship between instructors and courses
+                countQuery = "SELECT COUNT(*) as count FROM Courses WHERE createdBy = " + userID;
+            }
+            
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(countQuery)) {
+                if (rs.next() && rs.getInt("count") > 0) {
+                    VBox container = new VBox(15);
+                    container.setPadding(new Insets(20));
+                    container.setStyle("-fx-background-color: white; -fx-background-radius: 8px; -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 5, 0, 0, 2);");
+                    
+                    Label title = new Label("Your Courses");
+                    title.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: black;");
+                    
+                    VBox courseList = new VBox(10);
+                    
+                    // Get course data
+                    String courseQuery = "SELECT courseID, courseName, description FROM Courses LIMIT 5";
+                    if (isLoggedIn) {
+                        // If user is logged in, show only their courses
+                        courseQuery = "SELECT courseID, courseName, description FROM Courses WHERE createdBy = " + userID + " LIMIT 5";
+                    }
+                    
+                    try (Statement courseStmt = conn.createStatement();
+                         ResultSet courseRs = courseStmt.executeQuery(courseQuery)) {
+                        while (courseRs.next()) {
+                            int courseId = courseRs.getInt("courseID");
+                            String courseName = courseRs.getString("courseName");
+                            String description = courseRs.getString("description");
+                            if (description == null) description = "No description available";
+                            
+                            courseList.getChildren().add(
+                                createCourseItem(courseId, courseName, description)
+                            );
+                        }
+                    }
+                    
+                    container.getChildren().addAll(title, courseList);
+                    return container;
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error loading courses: " + e.getMessage());
         }
-        
-        return item;
+        return null;
     }
     
-    private VBox createCourseProgressSection() {
-        VBox container = new VBox(15);
-        container.setPadding(new Insets(20));
-        container.getStyleClass().add("course-container");
-        container.setPrefWidth(400);
-        
-        Label title = new Label("Course Progress");
-        title.getStyleClass().add("section-title");
-        
-        // Course progress items
-        VBox courseList = new VBox(15);
-        courseList.getChildren().addAll(
-            createCourseProgressItem("Introduction to Python", 85),
-            createCourseProgressItem("Web Development Fundamentals", 72),
-            createCourseProgressItem("Data Science Essentials", 45)
-        );
-        
-        container.getChildren().addAll(title, courseList);
-        return container;
-    }
-    
-    private VBox createCourseProgressItem(String courseName, int progressPercent) {
-        VBox item = new VBox(5);
-        item.getStyleClass().add("course-progress-item");
-        
-        HBox header = new HBox();
-        header.setAlignment(Pos.CENTER_LEFT);
-        
-        Label nameLabel = new Label(courseName);
-        nameLabel.getStyleClass().add("course-name");
-        
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        
-        Label percentLabel = new Label(progressPercent + "%");
-        percentLabel.getStyleClass().add("progress-percent");
-        
-        header.getChildren().addAll(nameLabel, spacer, percentLabel);
-        
-        // Progress bar
-        ProgressBar progressBar = new ProgressBar(progressPercent / 100.0);
-        progressBar.setMaxWidth(Double.MAX_VALUE);
-        progressBar.getStyleClass().add("course-progress-bar");
-        
-        item.getChildren().addAll(header, progressBar);
-        return item;
-    }
-    
-    private VBox createUpcomingDeadlinesSection() {
-        VBox container = new VBox(10);
-        container.setPadding(new Insets(20));
-        container.getStyleClass().add("deadlines-container");
-        container.setPrefWidth(400);
-        
-        Label title = new Label("Upcoming Deadlines");
-        title.getStyleClass().add("section-title");
-        
-        // Deadline items
-        VBox deadlinesList = new VBox(10);
-        deadlinesList.getChildren().addAll(
-            createDeadlineItem("Final Project Submission", "Introduction to Python", "June 25, 2023"),
-            createDeadlineItem("Quiz #3", "Web Development Fundamentals", "June 27, 2023"),
-            createDeadlineItem("Mid-term Exam", "Data Science Essentials", "July 2, 2023"),
-            createDeadlineItem("Group Presentation", "Web Development Fundamentals", "July 10, 2023")
-        );
-        
-        container.getChildren().addAll(title, deadlinesList);
-        return container;
-    }
-    
-    private HBox createDeadlineItem(String title, String course, String date) {
+    /**
+     * Create a course item for display
+     */
+    private HBox createCourseItem(int courseId, String courseName, String description) {
         HBox item = new HBox(10);
-        item.setPadding(new Insets(10));
-        item.getStyleClass().add("deadline-item");
+        item.setPadding(new Insets(15));
+        item.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 4;");
         
-        // Left color indicator
-        Rectangle indicator = new Rectangle(5, 50);
-        indicator.getStyleClass().add("deadline-indicator");
+        // Color indicator
+        Rectangle indicator = new Rectangle(5, 60);
+        indicator.setStyle("-fx-fill: " + PRIMARY_COLOR + ";");
         
-        // Details
-        VBox details = new VBox(3);
-        Label titleLabel = new Label(title);
-        titleLabel.getStyleClass().add("deadline-title");
+        // Course details
+        VBox details = new VBox(5);
+        Label nameLabel = new Label(courseName);
+        nameLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: black;");
         
-        Label courseLabel = new Label(course);
-        courseLabel.getStyleClass().add("deadline-course");
+        Label descLabel = new Label(description.length() > 100 ? 
+                                   description.substring(0, 97) + "..." : description);
+        descLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #7f8c8d;");
+        descLabel.setWrapText(true);
         
-        Label dateLabel = new Label("Due: " + date);
-        dateLabel.getStyleClass().add("deadline-date");
-        
-        details.getChildren().addAll(titleLabel, courseLabel, dateLabel);
+        details.getChildren().addAll(nameLabel, descLabel);
         HBox.setHgrow(details, Priority.ALWAYS);
         
-        // Add button
+        // View button
         Button viewBtn = new Button("View");
-        viewBtn.getStyleClass().add("view-button");
-        viewBtn.setAlignment(Pos.CENTER_RIGHT);
+        viewBtn.setStyle(
+            "-fx-background-color: " + PRIMARY_COLOR + ";" +
+            "-fx-text-fill: white;" +
+            "-fx-background-radius: 4;"
+        );
         
         item.getChildren().addAll(indicator, details, viewBtn);
         return item;
     }
     
-    private VBox createRecentActivitySection() {
-        VBox container = new VBox(10);
-        container.setPadding(new Insets(20));
-        container.getStyleClass().add("recent-activity-section");
-        
-        HBox header = new HBox();
-        header.setAlignment(Pos.CENTER_LEFT);
-        
-        Label title = new Label("Recent Student Activity");
-        title.getStyleClass().add("section-title");
-        
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        
-        Button viewAllBtn = new Button("View All");
-        viewAllBtn.getStyleClass().add("view-all-button");
-        
-        header.getChildren().addAll(title, spacer, viewAllBtn);
-        
-        // Activity list
-        VBox activityList = new VBox(12);
-        activityList.getChildren().addAll(
-            createActivityItem("John Smith submitted an assignment", "Introduction to Python", "15 minutes ago"),
-            createActivityItem("Emma Wilson joined your course", "Web Development Fundamentals", "1 hour ago"),
-            createActivityItem("Michael Brown posted a question in forum", "Data Science Essentials", "3 hours ago"),
-            createActivityItem("Sarah Johnson completed Quiz #2", "Introduction to Python", "Yesterday")
-        );
-        
-        container.getChildren().addAll(header, activityList);
-        return container;
+    /**
+     * Create assignments section with data from database
+     */
+    private VBox createAssignmentSection() {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            if (conn == null) return null;
+            
+            // Check if there are any assignments
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery("SELECT COUNT(*) as count FROM Assignments")) {
+                if (rs.next() && rs.getInt("count") > 0) {
+                    VBox container = new VBox(15);
+                    container.setPadding(new Insets(20));
+                    container.setStyle("-fx-background-color: white; -fx-background-radius: 8px; -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 5, 0, 0, 2);");
+                    
+                    Label title = new Label("Upcoming Assignments");
+                    title.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: black;");
+                    
+                    VBox assignmentList = new VBox(10);
+                    
+                    // Get assignment data - add filter by instructor if applicable
+                    String assignmentQuery = 
+                        "SELECT a.title, a.dueDate, a.priority, c.courseName " +
+                        "FROM Assignments a " +
+                        "JOIN Courses c ON a.courseID = c.courseID " +
+                        "ORDER BY a.dueDate ASC " +
+                        "LIMIT 5";
+                    
+                    if (isLoggedIn) {
+                        // If user is logged in, try to show only their assignments
+                        // This assumes courses have a createdBy field
+                        assignmentQuery = 
+                            "SELECT a.title, a.dueDate, a.priority, c.courseName " +
+                            "FROM Assignments a " +
+                            "JOIN Courses c ON a.courseID = c.courseID " +
+                            "WHERE c.createdBy = " + userID + " " +
+                            "ORDER BY a.dueDate ASC " +
+                            "LIMIT 5";
+                    }
+                    
+                    try (Statement asmtStmt = conn.createStatement();
+                         ResultSet asmtRs = asmtStmt.executeQuery(assignmentQuery)) {
+                        while (asmtRs.next()) {
+                            String title1 = asmtRs.getString("title");
+                            Date dueDate = asmtRs.getDate("dueDate");
+                            String priority = asmtRs.getString("priority");
+                            String courseName = asmtRs.getString("courseName");
+                            
+                            // Format due date
+                            String formattedDate = "No due date";
+                            if (dueDate != null) {
+                                formattedDate = new java.text.SimpleDateFormat("MMM d, yyyy").format(dueDate);
+                            }
+                            
+                            // Default priority if null
+                            if (priority == null) priority = "Medium";
+                            
+                            assignmentList.getChildren().add(
+                                createAssignmentItem(title1, courseName, formattedDate, priority)
+                            );
+                        }
+                    }
+                    
+                    container.getChildren().addAll(title, assignmentList);
+                    return container;
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error loading assignments: " + e.getMessage());
+        }
+        return null;
     }
     
-    private HBox createActivityItem(String activity, String course, String time) {
-        HBox item = new HBox(15);
-        item.setPadding(new Insets(10));
-        item.getStyleClass().add("activity-item");
+    /**
+     * Create an assignment item for display
+     */
+    private HBox createAssignmentItem(String title, String course, String dueDate, String priority) {
+        HBox item = new HBox(10);
+        item.setPadding(new Insets(15));
+        item.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 4;");
         
-        // Activity indicator
-        Rectangle indicator = new Rectangle(8, 50);
-        indicator.getStyleClass().add("activity-indicator");
+        // Color indicator based on priority
+        String indicatorColor;
+        if (priority.equalsIgnoreCase("High")) {
+            indicatorColor = DANGER_COLOR;
+        } else if (priority.equalsIgnoreCase("Medium")) {
+            indicatorColor = "#f39c12"; // Orange
+        } else {
+            indicatorColor = SECONDARY_COLOR;
+        }
         
-        // Content
-        VBox content = new VBox(5);
-        Label activityLabel = new Label(activity);
-        activityLabel.getStyleClass().add("activity-title");
+        Rectangle indicator = new Rectangle(5, 60);
+        indicator.setStyle("-fx-fill: " + indicatorColor + ";");
+        
+        // Assignment details
+        VBox details = new VBox(5);
+        Label titleLabel = new Label(title);
+        titleLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: black;");
         
         Label courseLabel = new Label(course);
-        courseLabel.getStyleClass().add("activity-course");
+        courseLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #7f8c8d;");
         
-        Label timeLabel = new Label(time);
-        timeLabel.getStyleClass().add("activity-time");
+        Label dateLabel = new Label("Due: " + dueDate);
+        dateLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #7f8c8d;");
         
-        content.getChildren().addAll(activityLabel, courseLabel, timeLabel);
-        HBox.setHgrow(content, Priority.ALWAYS);
+        details.getChildren().addAll(titleLabel, courseLabel, dateLabel);
+        HBox.setHgrow(details, Priority.ALWAYS);
         
-        item.getChildren().addAll(indicator, content);
+        // Priority label
+        Label priorityLabel = new Label(priority);
+        priorityLabel.setStyle(
+            "-fx-background-color: " + indicatorColor + ";" +
+            "-fx-text-fill: white;" +
+            "-fx-padding: 2 8;" +
+            "-fx-background-radius: 4;"
+        );
+        
+        item.getChildren().addAll(indicator, details, priorityLabel);
         return item;
     }
     
-    private HBox createQuickActionButtons() {
-        HBox container = new HBox(15);
-        container.setPadding(new Insets(10, 10, 30, 10));
-        
-        Button createCourseBtn = new Button("Create Course");
-        createCourseBtn.getStyleClass().add("action-button");
-        
-        Button createAssignmentBtn = new Button("Create Assignment");
-        createAssignmentBtn.getStyleClass().add("action-button");
-        
-        Button createQuizBtn = new Button("Create Quiz");
-        createQuizBtn.getStyleClass().add("action-button");
-        
-        Button messageStudentsBtn = new Button("Message Students");
-        messageStudentsBtn.getStyleClass().add("action-button");
-        
-        container.getChildren().addAll(createCourseBtn, createAssignmentBtn, createQuizBtn, messageStudentsBtn);
-        return container;
-    }
+    // Note: The createQuickActionButtons() method has been completely removed
 }

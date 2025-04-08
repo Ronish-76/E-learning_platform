@@ -28,7 +28,7 @@ public class Login extends Application {
     private static User loggedInUser = null;
 
     @Override
-    public void start(Stage primaryStage) {
+    public void start(Stage primaryStage) { 
         VBox leftPanel = new VBox(15);
         leftPanel.setPadding(new Insets(40));
         leftPanel.setAlignment(Pos.CENTER_LEFT);

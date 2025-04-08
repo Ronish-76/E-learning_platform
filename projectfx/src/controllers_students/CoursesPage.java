@@ -19,21 +19,13 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.util.Duration;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import dao.DatabaseConnection;
 
-/**
- * A streamlined course management application that displays a list of enrolled courses
- * for the current student and shows detailed information when a course is selected.
- */
 public class CoursesPage extends Application {
     // Constants for color scheme
     private static final String PRIMARY_COLOR = "#3498db";
@@ -60,55 +52,45 @@ public class CoursesPage extends Application {
     
     // Course data from database
     private List<Course> enrolledCourses = new ArrayList<>();
+    private int currentCourseId = 0;
+    private int currentLessonId = 0;
     
-    /**
-     * Constructor for CoursesPage
-     */
     public CoursesPage() {
-        // Try to get logged-in user from Login class
         this.currentUser = Login.getLoggedInUser();
         if (currentUser != null) {
             this.currentUserId = currentUser.getUserID();
             try {
                 this.studentId = getStudentId(currentUserId);
+                System.out.println("Student ID: " + studentId); // Debug output
             } catch (SQLException e) {
                 showError("Database Error", "Error retrieving student ID: " + e.getMessage());
+                e.printStackTrace();
             }
         }
         loadEnrolledCourses();
     }
     
-    /**
-     * Constructor with user ID parameter
-     */
     public CoursesPage(int userId) {
         this.currentUserId = userId;
-        // If Login.getLoggedInUser() is available, prefer that
         User loggedInUser = Login.getLoggedInUser();
         if (loggedInUser != null) {
             this.currentUser = loggedInUser;
             this.currentUserId = loggedInUser.getUserID();
         }
-        
         try {
             this.studentId = getStudentId(currentUserId);
+            System.out.println("Student ID: " + studentId); // Debug output
         } catch (SQLException e) {
             showError("Database Error", "Error retrieving student ID: " + e.getMessage());
+            e.printStackTrace();
         }
-        
         loadEnrolledCourses();
     }
     
-    /**
-     * Main method to launch the application
-     */
     public static void main(String[] args) {
         launch(args);
     }
     
-    /**
-     * Start method required by JavaFX Application
-     */
     @Override
     public void start(Stage primaryStage) {
         primaryStage.setTitle("My Courses");
@@ -118,96 +100,130 @@ public class CoursesPage extends Application {
         primaryStage.show();
     }
     
-    /**
-     * Returns the main view for the application
-     */
     public Node getView() {
         return createMainView();
     }
     
-    /**
-     * Load enrolled courses from database for the current student
-     */
     private void loadEnrolledCourses() {
         enrolledCourses.clear();
-        
         if (studentId <= 0) {
-            return; // No student ID, can't load courses
+            System.out.println("No student ID available, cannot load courses");
+            return;
         }
         
         try (Connection conn = DatabaseConnection.getConnection()) {
+            System.out.println("Database connection successful for loading enrolled courses");
+            
+            // Updated query to correctly calculate progress
             String query = "SELECT c.courseID, c.courseName, c.description, " +
-                          "COALESCE(MAX(a.completionStatus = 'Completed'), 0) * 100.0 / " +
-                          "(SELECT COUNT(*) FROM Activities WHERE courseID = c.courseID) as progress " +
-                          "FROM Courses c " +
-                          "JOIN Enrollments e ON c.courseID = e.courseID " +
-                          "LEFT JOIN Activities a ON c.courseID = a.courseID AND a.studentID = e.studentID " +
-                          "WHERE e.studentID = ? " +
-                          "GROUP BY c.courseID";
+                    "IFNULL(ROUND((SELECT COUNT(*) FROM LessonProgress lp " +
+                    "JOIN Lessons l ON lp.lessonID = l.lessonID " +
+                    "WHERE l.courseID = c.courseID AND lp.studentID = ? " +
+                    "AND lp.completionStatus = 'Completed') * 100.0 / " +
+                    "(SELECT COUNT(*) FROM Lessons WHERE courseID = c.courseID), 0), 0) as progressPercentage " +
+                    "FROM Courses c " +
+                    "JOIN Enrollments e ON c.courseID = e.courseID " +
+                    "WHERE e.studentID = ?";
             
             try (PreparedStatement pstmt = conn.prepareStatement(query)) {
                 pstmt.setInt(1, studentId);
+                pstmt.setInt(2, studentId);
                 
                 try (ResultSet rs = pstmt.executeQuery()) {
                     while (rs.next()) {
                         int courseId = rs.getInt("courseID");
                         String courseName = rs.getString("courseName");
                         String description = rs.getString("description");
+                        double progress = rs.getDouble("progressPercentage") / 100.0;
                         
-                        // Get progress as a value between 0 and 1
-                        double progress = rs.getDouble("progress") / 100.0;
-                        if (rs.wasNull()) {
-                            progress = 0.0; // Default progress if NULL
-                        }
-                        
-                        // Get course content from the database
                         String content = getCourseContent(courseId);
                         
                         Course course = new Course(
                             courseId,
-                            courseName, 
-                            progress, 
+                            courseName,
+                            progress,
                             content,
-                            description
+                            description != null ? description : "No description available"
                         );
                         
                         enrolledCourses.add(course);
+                        System.out.println("Loaded course: " + courseName + " with progress: " + progress);
                     }
                 }
             }
         } catch (SQLException e) {
-            showError("Database Error", "Error loading enrolled courses: " + e.getMessage());
+            System.out.println("Database connection failed: " + e.getMessage());
             e.printStackTrace();
+            showError("Database Error", "Error loading enrolled courses: " + e.getMessage());
         }
     }
     
-    /**
-     * Get course content from the database
-     */
     private String getCourseContent(int courseId) {
         StringBuilder content = new StringBuilder();
         
         try (Connection conn = DatabaseConnection.getConnection()) {
-            String query = "SELECT lessonTitle, lessonContent FROM Lessons WHERE courseID = ?";
+            // First, check if the content column exists
+            boolean contentColumnExists = checkIfContentColumnExists(conn);
+            
+            String query;
+            if (contentColumnExists) {
+                query = "SELECT l.lessonID, l.title, l.category, " +
+                        "l.content, lp.completionStatus, lp.completionDate " +
+                        "FROM Lessons l " +
+                        "LEFT JOIN LessonProgress lp ON l.lessonID = lp.lessonID AND lp.studentID = ? " +
+                        "WHERE l.courseID = ? " +
+                        "ORDER BY l.lessonID";
+            } else {
+                // If content column doesn't exist, don't include it in the query
+                query = "SELECT l.lessonID, l.title, l.category, " +
+                        "lp.completionStatus, lp.completionDate " +
+                        "FROM Lessons l " +
+                        "LEFT JOIN LessonProgress lp ON l.lessonID = lp.lessonID AND lp.studentID = ? " +
+                        "WHERE l.courseID = ? " +
+                        "ORDER BY l.lessonID";
+            }
             
             try (PreparedStatement pstmt = conn.prepareStatement(query)) {
-                pstmt.setInt(1, courseId);
+                pstmt.setInt(1, studentId);
+                pstmt.setInt(2, courseId);
                 
                 try (ResultSet rs = pstmt.executeQuery()) {
                     while (rs.next()) {
-                        String title = rs.getString("lessonTitle");
-                        String lessonContent = rs.getString("lessonContent");
+                        int lessonId = rs.getInt("lessonID");
+                        String title = rs.getString("title");
+                        String category = rs.getString("category");
+                        String status = rs.getString("completionStatus");
+                        Date completionDate = rs.getDate("completionDate");
                         
-                        content.append("## ").append(title).append("\n\n");
-                        content.append(lessonContent).append("\n\n");
+                        content.append("## ").append(title).append("\n");
+                        content.append("**Category:** ").append(category != null ? category : "Uncategorized").append("\n");
+                        content.append("**Status:** ").append(status != null ? status : "Not Started").append("\n");
+                        
+                        if (completionDate != null) {
+                            content.append("**Completed on:** ").append(completionDate).append("\n");
+                        }
+                        
+                        // Only try to get content if the column exists
+                        if (contentColumnExists) {
+                            String lessonContent = rs.getString("content");
+                            if (lessonContent != null && !lessonContent.isEmpty()) {
+                                content.append("**Preview:** ").append(
+                                    lessonContent.substring(0, Math.min(lessonContent.length(), 100)))
+                                    .append("...\n");
+                            } else {
+                                content.append("**Preview:** Content will be available soon.\n");
+                            }
+                        }
+                        
+                        content.append("\n");
                     }
                 }
             }
         } catch (SQLException e) {
             content.append("Error loading course content: ").append(e.getMessage());
+            e.printStackTrace();
         }
         
-        // If no content was found, provide default content
         if (content.length() == 0) {
             content.append("This course doesn't have any lessons yet. Check back later for updates!");
         }
@@ -215,42 +231,60 @@ public class CoursesPage extends Application {
         return content.toString();
     }
     
-    /**
-     * Creates and returns the main view with courses list
-     */
+    // Check if content column exists in Lessons table
+    private boolean checkIfContentColumnExists(Connection conn) throws SQLException {
+        boolean exists = false;
+        
+        try (ResultSet rs = conn.getMetaData().getColumns(null, null, "Lessons", "content")) {
+            exists = rs.next();
+        }
+        
+        System.out.println("Content column exists: " + exists);
+        
+        // If column doesn't exist, create it
+        if (!exists) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.executeUpdate("ALTER TABLE Lessons ADD COLUMN content TEXT");
+                System.out.println("Added missing content column to Lessons table");
+                return true;
+            } catch (SQLException e) {
+                System.out.println("Failed to add content column: " + e.getMessage());
+                e.printStackTrace();
+                return false;
+            }
+        }
+        
+        return exists;
+    }
+    
     private BorderPane createMainView() {
         BorderPane root = new BorderPane();
         root.setStyle("-fx-background-color: " + BACKGROUND_COLOR + ";");
         
-        // Header with title
         HBox header = createHeader();
         root.setTop(header);
         
-        // Main content area with courses
         mainContent = new StackPane();
         mainContent.setPadding(new Insets(20));
+        
         VBox coursesView = createCoursesView();
         courseDetailView = createCourseDetailView();
+        
         mainContent.getChildren().add(coursesView);
         root.setCenter(mainContent);
         
-        // Footer
         HBox footer = createFooter();
         root.setBottom(footer);
         
         return root;
     }
     
-    /**
-     * Creates the header section with title
-     */
     private HBox createHeader() {
         HBox header = new HBox(15);
         header.setPadding(new Insets(20, 30, 15, 30));
         header.setAlignment(Pos.CENTER_LEFT);
         header.setStyle("-fx-background-color: " + CARD_COLOR + ";");
         
-        // App logo
         Rectangle logoPlaceholder = new Rectangle(40, 40);
         logoPlaceholder.setArcWidth(10);
         logoPlaceholder.setArcHeight(10);
@@ -261,17 +295,11 @@ public class CoursesPage extends Application {
         titleLabel.setTextFill(Color.web(TEXT_COLOR));
         
         header.getChildren().addAll(logoPlaceholder, titleLabel);
-        
-        // Add drop shadow
-        DropShadow dropShadow = createDropShadow(3);
-        header.setEffect(dropShadow);
+        header.setEffect(createDropShadow(3));
         
         return header;
     }
     
-    /**
-     * Creates the courses view with a list of enrolled courses
-     */
     private VBox createCoursesView() {
         VBox coursesView = new VBox(20);
         coursesView.setPadding(new Insets(20));
@@ -285,7 +313,8 @@ public class CoursesPage extends Application {
         subtitleLabel.setFont(Font.font("Segoe UI", 16));
         subtitleLabel.setTextFill(Color.web(SUBTEXT_COLOR));
         
-        // Show message if no courses are enrolled
+        System.out.println("Enrolled courses count: " + enrolledCourses.size());
+        
         if (enrolledCourses.isEmpty()) {
             VBox noCoursesBox = new VBox(15);
             noCoursesBox.setAlignment(Pos.CENTER);
@@ -307,11 +336,9 @@ public class CoursesPage extends Application {
                 "-fx-background-radius: 5; " +
                 "-fx-font-weight: bold;"
             );
-            
-            // Add action to navigate to HomePage or trigger the appropriate method
             browseButton.setOnAction(e -> {
-                // Navigate to the Home Page or equivalent
-                // This would depend on your navigation setup
+                // Navigate to available courses page (to be implemented)
+                showError("Navigation", "Navigate to Available Courses page - This feature is coming soon!");
             });
             
             noCoursesBox.getChildren().addAll(noCoursesLabel, enrollSuggestion, browseButton);
@@ -320,16 +347,15 @@ public class CoursesPage extends Application {
             return coursesView;
         }
         
-        // Courses grid
         GridPane courseGrid = new GridPane();
         courseGrid.setHgap(20);
         courseGrid.setVgap(20);
         courseGrid.setAlignment(Pos.CENTER);
         
         ObservableList<Course> courses = FXCollections.observableArrayList(enrolledCourses);
-        
         int column = 0;
         int row = 0;
+        
         for (Course course : courses) {
             VBox courseCard = createCourseCard(course);
             courseGrid.add(courseCard, column, row);
@@ -345,9 +371,6 @@ public class CoursesPage extends Application {
         return coursesView;
     }
     
-    /**
-     * Creates a card for an individual course
-     */
     private VBox createCourseCard(Course course) {
         VBox card = new VBox(10);
         card.setPadding(new Insets(20));
@@ -360,13 +383,12 @@ public class CoursesPage extends Application {
         titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
         titleLabel.setTextFill(Color.web(TEXT_COLOR));
         
-        // Use the description from the course object
         Label descLabel = new Label(course.getDescription());
         descLabel.setFont(Font.font("Segoe UI", 14));
         descLabel.setTextFill(Color.web(SUBTEXT_COLOR));
         descLabel.setWrapText(true);
+        descLabel.setMaxHeight(60);
         
-        // Progress indicator
         HBox progressBox = new HBox(10);
         progressBox.setAlignment(Pos.CENTER_LEFT);
         
@@ -383,27 +405,30 @@ public class CoursesPage extends Application {
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
         
-        // Action button
         Button actionButton = new Button(getButtonTextForProgress(course.getProgress()));
         actionButton.setPrefWidth(Double.MAX_VALUE);
         actionButton.setStyle(getButtonStyleForProgress(course.getProgress()));
         
-        // Set click event
-        card.setOnMouseClicked(e -> showCourseDetail(course));
+        // Add action to the card's button
+        actionButton.setOnAction(e -> {
+            currentCourseId = course.getId();
+            showCourseDetail(course);
+        });
+        
+        card.setOnMouseClicked(e -> {
+            currentCourseId = course.getId();
+            showCourseDetail(course);
+        });
         
         card.getChildren().addAll(titleLabel, descLabel, spacer, progressBox, actionButton);
         return card;
     }
     
-    /**
-     * Creates the detailed view of a course
-     */
     private BorderPane createCourseDetailView() {
         BorderPane detailView = new BorderPane();
         detailView.setPadding(new Insets(20));
         detailView.setStyle("-fx-background-color: " + CARD_COLOR + "; -fx-background-radius: 10;");
         
-        // Header with back button and title
         HBox header = new HBox(15);
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(0, 0, 20, 0));
@@ -422,12 +447,10 @@ public class CoursesPage extends Application {
         
         header.getChildren().addAll(backButton, lessonTitleLabel);
         
-        // Course content
         VBox contentSection = new VBox(20);
         contentSection.setPadding(new Insets(20));
         contentSection.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 8;");
         
-        // Metadata bar
         HBox metadataBar = new HBox(20);
         metadataBar.setAlignment(Pos.CENTER_LEFT);
         metadataBar.setPadding(new Insets(10, 0, 10, 0));
@@ -446,7 +469,6 @@ public class CoursesPage extends Application {
         
         metadataBar.getChildren().addAll(timeLabel, difficultyLabel, authorLabel);
         
-        // Lesson content
         lessonContentArea = new TextArea();
         lessonContentArea.setWrapText(true);
         lessonContentArea.setEditable(false);
@@ -462,7 +484,6 @@ public class CoursesPage extends Application {
         contentSection.getChildren().addAll(metadataBar, lessonContentArea);
         VBox.setVgrow(contentSection, Priority.ALWAYS);
         
-        // Button row
         HBox buttonRow = new HBox(15);
         buttonRow.setAlignment(Pos.CENTER);
         buttonRow.setPadding(new Insets(20, 0, 0, 0));
@@ -475,6 +496,7 @@ public class CoursesPage extends Application {
             "-fx-border-radius: 5;"
         );
         previousButton.setPrefWidth(150);
+        previousButton.setOnAction(e -> navigateToPreviousLesson());
         
         nextButton = new Button("Next Lesson");
         nextButton.setStyle(
@@ -484,6 +506,7 @@ public class CoursesPage extends Application {
             "-fx-border-radius: 5;"
         );
         nextButton.setPrefWidth(150);
+        nextButton.setOnAction(e -> navigateToNextLesson());
         
         lessonActionButton = new Button("Start Lesson");
         lessonActionButton.setPrefWidth(200);
@@ -508,57 +531,256 @@ public class CoursesPage extends Application {
         return detailView;
     }
     
-    /**
-     * Creates the footer section
-     */
+    private void navigateToPreviousLesson() {
+        try {
+            int prevLessonId = getPreviousLesson(currentCourseId, currentLessonId);
+            if (prevLessonId > 0) {
+                currentLessonId = prevLessonId;
+                updateLessonContent();
+            } else {
+                showError("Navigation", "You are at the first lesson of this course.");
+            }
+        } catch (SQLException e) {
+            showError("Database Error", "Error navigating to previous lesson: " + e.getMessage());
+        }
+    }
+    
+    private void navigateToNextLesson() {
+        try {
+            int nextLessonId = getNextLesson(currentCourseId, currentLessonId);
+            if (nextLessonId > 0) {
+                currentLessonId = nextLessonId;
+                updateLessonContent();
+            } else {
+                showError("Navigation", "You are at the last lesson of this course.");
+            }
+        } catch (SQLException e) {
+            showError("Database Error", "Error navigating to next lesson: " + e.getMessage());
+        }
+    }
+    
+    private void updateLessonContent() {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            // Check if content column exists
+            boolean contentColumnExists = checkIfContentColumnExists(conn);
+            
+            // Use appropriate query based on column existence
+            String query;
+            if (contentColumnExists) {
+                query = "SELECT title, content, category FROM Lessons WHERE lessonID = ?";
+            } else {
+                query = "SELECT title, category FROM Lessons WHERE lessonID = ?";
+            }
+            
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, currentLessonId);
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        String title = rs.getString("title");
+                        String category = rs.getString("category");
+                        
+                        lessonTitleLabel.setText(title);
+                        
+                        // Get content if column exists
+                        String content;
+                        if (contentColumnExists) {
+                            content = rs.getString("content");
+                            if (content == null || content.isEmpty()) {
+                                content = "No content available for this lesson. The instructor has not added content yet.";
+                                // Add placeholder content since the column exists but is empty
+                                addPlaceholderContent(currentLessonId, title, category);
+                            }
+                        } else {
+                            content = "The lesson content feature has been newly added. Please check back later for updated content.";
+                        }
+                        
+                        lessonContentArea.setText(content);
+                        
+                        // Update completion status button
+                        boolean isCompleted = isLessonCompleted(currentLessonId, studentId);
+                        if (isCompleted) {
+                            lessonActionButton.setText("Completed");
+                            lessonActionButton.setStyle(
+                                "-fx-background-color: " + ACCENT_COLOR + "; " +
+                                "-fx-text-fill: white; " +
+                                "-fx-background-radius: 5; " +
+                                "-fx-font-weight: bold;"
+                            );
+                        } else {
+                            lessonActionButton.setText("Mark as Completed");
+                            lessonActionButton.setStyle(
+                                "-fx-background-color: " + SECONDARY_COLOR + "; " +
+                                "-fx-text-fill: white; " +
+                                "-fx-background-radius: 5; " +
+                                "-fx-font-weight: bold;"
+                            );
+                            
+                            // Set action for marking lesson as completed
+                            lessonActionButton.setOnAction(e -> {
+                                try {
+                                    markLessonAsCompleted(currentCourseId, studentId, currentLessonId);
+                                    updateLessonContent(); // Refresh the content
+                                    
+                                    Alert successAlert = new Alert(AlertType.INFORMATION);
+                                    successAlert.setTitle("Progress Updated");
+                                    successAlert.setHeaderText("Lesson Completed!");
+                                    successAlert.setContentText("Your progress has been updated.");
+                                    successAlert.show();
+                                } catch (SQLException ex) {
+                                    showError("Error", "Could not update progress: " + ex.getMessage());
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            showError("Database Error", "Error loading lesson content: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    private void addPlaceholderContent(int lessonId, String title, String category) {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String content = "# " + title + "\n\n" +
+                "Welcome to this lesson on " + title + " in the " + category + " category.\n\n" +
+                "This is placeholder content that will be replaced with the actual lesson material.\n\n" +
+                "Topics that will be covered:\n" +
+                "- Introduction to " + title + "\n" +
+                "- Key concepts and principles\n" +
+                "- Practical applications\n" +
+                "- Exercises and examples";
+                
+            String query = "UPDATE Lessons SET content = ? WHERE lessonID = ?";
+            
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setString(1, content);
+                pstmt.setInt(2, lessonId);
+                pstmt.executeUpdate();
+                
+                System.out.println("Added placeholder content for lesson ID: " + lessonId);
+            }
+        } catch (SQLException e) {
+            System.out.println("Error adding placeholder content: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    private int getPreviousLesson(int courseId, int currentLessonId) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String query = "SELECT MAX(lessonID) as prevLesson FROM Lessons " +
+                    "WHERE courseID = ? AND lessonID < ?";
+                    
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, courseId);
+                pstmt.setInt(2, currentLessonId);
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    return rs.next() ? rs.getInt("prevLesson") : 0;
+                }
+            }
+        }
+    }
+    
+    private int getNextLesson(int courseId, int currentLessonId) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String query = "SELECT MIN(lessonID) as nextLesson FROM Lessons " +
+                    "WHERE courseID = ? AND lessonID > ?";
+                    
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, courseId);
+                pstmt.setInt(2, currentLessonId);
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    return rs.next() ? rs.getInt("nextLesson") : 0;
+                }
+            }
+        }
+    }
+    
+    private boolean isLessonCompleted(int lessonId, int studentId) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String query = "SELECT completionStatus FROM LessonProgress " +
+                    "WHERE lessonID = ? AND studentID = ?";
+                    
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, lessonId);
+                pstmt.setInt(2, studentId);
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    return rs.next() && "Completed".equals(rs.getString("completionStatus"));
+                }
+            }
+        }
+    }
+    
     private HBox createFooter() {
         HBox footer = new HBox(10);
         footer.setPadding(new Insets(15));
         footer.setAlignment(Pos.CENTER);
         footer.setStyle("-fx-background-color: " + CARD_COLOR + ";");
         
-        Label copyrightLabel = new Label("© 2023 Learning Platform | Need help? Contact support");
-        copyrightLabel.setTextFill(Color.web(SUBTEXT_COLOR));
-        copyrightLabel.setFont(Font.font("Segoe UI", 12));
-        
-        footer.getChildren().add(copyrightLabel);
+
         return footer;
     }
-    
-    /**
-     * Shows detailed information for a selected course
-     */
+
     private void showCourseDetail(Course course) {
-        // Update course detail content
         lessonTitleLabel.setText(course.getName());
         lessonContentArea.setText(course.getLessonContent());
         
-        // Update action button based on progress
+        // Get first lesson for this course
+        currentLessonId = getFirstLesson(course.getId());
+        
+        // Set up the action button
         lessonActionButton.setText(getButtonTextForProgress(course.getProgress()));
         lessonActionButton.setStyle(getButtonStyleForProgress(course.getProgress()));
         
-        // Set action for the lesson button (e.g., mark as completed)
-        lessonActionButton.setOnAction(e -> {
-            try {
-                markLessonAsCompleted(course.getId(), studentId);
-                
-                // Show success message
-                Alert successAlert = new Alert(AlertType.INFORMATION);
-                successAlert.setTitle("Progress Updated");
-                successAlert.setHeaderText("Lesson Completed!");
-                successAlert.setContentText("Your progress has been updated.");
-                successAlert.show();
-                
-                // Reload courses to refresh progress
-                loadEnrolledCourses();
-                returnToCoursesView();
-                
-            } catch (SQLException ex) {
-                showError("Error", "Could not update progress: " + ex.getMessage());
-            }
-        });
+        // Set up navigation buttons
+        boolean hasNextLesson = hasNextLesson(course.getId(), currentLessonId);
+        boolean hasPrevLesson = hasPreviousLesson(course.getId(), currentLessonId);
+        nextButton.setDisable(!hasNextLesson);
+        previousButton.setDisable(!hasPrevLesson);
         
-        // Transition to the detail view
+        // Set up action button behavior based on the course progress
+        if (course.getProgress() == 0.0) {
+            // First time starting course
+            lessonActionButton.setOnAction(e -> {
+                try {
+                    markLessonAsCompleted(course.getId(), studentId, currentLessonId);
+                    loadEnrolledCourses(); // Refresh data
+                    showCourseDetail(getCourseById(course.getId())); // Refresh view
+                } catch (SQLException ex) {
+                    showError("Error", "Could not update progress: " + ex.getMessage());
+                }
+            });
+        } else if (course.getProgress() < 1.0) {
+            // Course in progress
+            lessonActionButton.setText("Continue Learning");
+            lessonActionButton.setOnAction(e -> {
+                try {
+                    int nextIncompleteLesson = getNextIncompleteLesson(course.getId(), studentId);
+                    if (nextIncompleteLesson > 0) {
+                        currentLessonId = nextIncompleteLesson;
+                        updateLessonContent();
+                    } else {
+                        showError("Course Progress", "No incomplete lessons found.");
+                    }
+                } catch (SQLException ex) {
+                    showError("Error", "Could not find next incomplete lesson: " + ex.getMessage());
+                }
+            });
+        } else {
+            // Course completed
+            lessonActionButton.setText("Review Course");
+            lessonActionButton.setOnAction(e -> {
+                // Just display the course content for review
+                currentLessonId = getFirstLesson(course.getId());
+                updateLessonContent();
+            });
+        }
+        
+        // Animate transition to course detail view
         FadeTransition fadeOut = new FadeTransition(Duration.millis(200), mainContent);
         fadeOut.setFromValue(1.0);
         fadeOut.setToValue(0.0);
@@ -572,56 +794,133 @@ public class CoursesPage extends Application {
         });
         fadeOut.play();
     }
-    
-    /**
-     * Mark a lesson as completed in the database
-     */
-    private void markLessonAsCompleted(int courseId, int studentId) throws SQLException {
+
+    private Course getCourseById(int courseId) {
+        for (Course course : enrolledCourses) {
+            if (course.getId() == courseId) {
+                return course;
+            }
+        }
+        return null;
+    }
+
+    private int getFirstLesson(int courseId) {
         try (Connection conn = DatabaseConnection.getConnection()) {
-            // Get the next lesson that isn't completed
-            String lessonQuery = "SELECT lessonID FROM Lessons WHERE courseID = ? " +
-                                "AND lessonID NOT IN (" +
-                                "  SELECT lessonID FROM LessonProgress " +
-                                "  WHERE studentID = ? AND completionStatus = 'Completed'" +
-                                ") ORDER BY lessonID LIMIT 1";
-            
-            try (PreparedStatement pstmt = conn.prepareStatement(lessonQuery)) {
+            String query = "SELECT MIN(lessonID) as firstLesson FROM Lessons WHERE courseID = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
                 pstmt.setInt(1, courseId);
-                pstmt.setInt(2, studentId);
-                
                 try (ResultSet rs = pstmt.executeQuery()) {
-                    if (rs.next()) {
-                        int lessonId = rs.getInt("lessonID");
-                        
-                        // Mark the lesson as completed
-                        String updateQuery = "INSERT INTO LessonProgress (studentID, lessonID, completionStatus, completionDate) " +
-                                          "VALUES (?, ?, 'Completed', CURRENT_TIMESTAMP) " +
-                                          "ON DUPLICATE KEY UPDATE completionStatus = 'Completed', completionDate = CURRENT_TIMESTAMP";
-                        
-                        try (PreparedStatement updateStmt = conn.prepareStatement(updateQuery)) {
-                            updateStmt.setInt(1, studentId);
-                            updateStmt.setInt(2, lessonId);
-                            updateStmt.executeUpdate();
-                        }
-                        
-                        // Log activity
-                        logActivity(studentId, courseId, "Lesson Completion", "Completed a lesson", "Completed");
-                    } else {
-                        throw new SQLException("No more lessons to complete for this course");
-                    }
+                    return rs.next() ? rs.getInt("firstLesson") : 0;
+                }
+            }
+        } catch (SQLException e) {
+            showError("Database Error", "Error retrieving first lesson: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    private boolean hasNextLesson(int courseId, int currentLessonId) {
+        try {
+            return getNextLesson(courseId, currentLessonId) > 0;
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
+    private boolean hasPreviousLesson(int courseId, int currentLessonId) {
+        try {
+            return getPreviousLesson(courseId, currentLessonId) > 0;
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
+    private int getNextIncompleteLesson(int courseId, int studentId) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            // This query finds the first lesson in the course that doesn't have a completed status
+            String query = "SELECT l.lessonID FROM Lessons l " +
+                    "LEFT JOIN LessonProgress lp ON l.lessonID = lp.lessonID AND lp.studentID = ? " +
+                    "WHERE l.courseID = ? AND (lp.completionStatus IS NULL OR lp.completionStatus != 'Completed') " +
+                    "ORDER BY l.lessonID LIMIT 1";
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, studentId);
+                pstmt.setInt(2, courseId);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    return rs.next() ? rs.getInt("lessonID") : 0;
                 }
             }
         }
     }
-    
-    /**
-     * Log an activity in the database
-     */
+
+    private void markLessonAsCompleted(int courseId, int studentId, int lessonId) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            conn.setAutoCommit(false); // Begin transaction
+            
+            try {
+                // First, check if the record already exists
+                String checkQuery = "SELECT * FROM LessonProgress WHERE studentID = ? AND lessonID = ?";
+                boolean recordExists = false;
+                
+                try (PreparedStatement checkStmt = conn.prepareStatement(checkQuery)) {
+                    checkStmt.setInt(1, studentId);
+                    checkStmt.setInt(2, lessonId);
+                    try (ResultSet rs = checkStmt.executeQuery()) {
+                        recordExists = rs.next();
+                    }
+                }
+                
+                // Either insert new record or update existing one
+                String query;
+                if (recordExists) {
+                    query = "UPDATE LessonProgress SET completionStatus = 'Completed', completionDate = CURRENT_TIMESTAMP " +
+                            "WHERE studentID = ? AND lessonID = ?";
+                } else {
+                    query = "INSERT INTO LessonProgress (studentID, lessonID, completionStatus, completionDate) " +
+                            "VALUES (?, ?, 'Completed', CURRENT_TIMESTAMP)";
+                }
+                
+                try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                    pstmt.setInt(1, studentId);
+                    pstmt.setInt(2, lessonId);
+                    pstmt.executeUpdate();
+                }
+                
+                // Update the overall course progress in Enrollments table
+                String progressQuery = "UPDATE Enrollments e " +
+                        "SET completionPercentage = (" +
+                        "  SELECT COUNT(*) * 100.0 / (SELECT COUNT(*) FROM Lessons WHERE courseID = ?) " +
+                        "  FROM LessonProgress lp " +
+                        "  JOIN Lessons l ON lp.lessonID = l.lessonID " +
+                        "  WHERE l.courseID = ? AND lp.studentID = ? AND lp.completionStatus = 'Completed'" +
+                        ") WHERE e.studentID = ? AND e.courseID = ?";
+                
+                try (PreparedStatement pstmt = conn.prepareStatement(progressQuery)) {
+                    pstmt.setInt(1, courseId);
+                    pstmt.setInt(2, courseId);
+                    pstmt.setInt(3, studentId);
+                    pstmt.setInt(4, studentId);
+                    pstmt.setInt(5, courseId);
+                    pstmt.executeUpdate();
+                }
+                
+                // Log the activity
+                logActivity(studentId, courseId, "Lesson Completion",
+                        "Completed lesson ID: " + lessonId, "Completed");
+                
+                conn.commit(); // Commit transaction
+            } catch (SQLException e) {
+                conn.rollback(); // Rollback on error
+                throw e;
+            } finally {
+                conn.setAutoCommit(true); // Reset auto-commit
+            }
+        }
+    }
+
     private void logActivity(int studentId, int courseId, String activityType, String description, String status) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection()) {
             String query = "INSERT INTO Activities (studentID, courseID, activityType, description, completionStatus) " +
-                          "VALUES (?, ?, ?, ?, ?)";
-            
+                    "VALUES (?, ?, ?, ?, ?)";
             try (PreparedStatement pstmt = conn.prepareStatement(query)) {
                 pstmt.setInt(1, studentId);
                 pstmt.setInt(2, courseId);
@@ -632,11 +931,11 @@ public class CoursesPage extends Application {
             }
         }
     }
-    
-    /**
-     * Returns to the courses list view
-     */
+
     private void returnToCoursesView() {
+        // Reload the course data in case changes were made
+        loadEnrolledCourses();
+        
         FadeTransition fadeOut = new FadeTransition(Duration.millis(200), mainContent);
         fadeOut.setFromValue(1.0);
         fadeOut.setToValue(0.0);
@@ -650,10 +949,7 @@ public class CoursesPage extends Application {
         });
         fadeOut.play();
     }
-    
-    /**
-     * Returns appropriate button text based on course progress
-     */
+
     private String getButtonTextForProgress(double progress) {
         if (progress == 0.0) {
             return "Start Course";
@@ -663,10 +959,7 @@ public class CoursesPage extends Application {
             return "Review Course";
         }
     }
-    
-    /**
-     * Returns appropriate button style based on course progress
-     */
+
     private String getButtonStyleForProgress(double progress) {
         String baseStyle = "-fx-text-fill: white; -fx-background-radius: 5; -fx-font-weight: bold;";
         if (progress == 0.0) {
@@ -677,10 +970,7 @@ public class CoursesPage extends Application {
             return "-fx-background-color: " + ACCENT_COLOR + "; " + baseStyle;
         }
     }
-    
-    /**
-     * Get student ID from user ID
-     */
+
     private int getStudentId(int userId) throws SQLException {
         if (userId <= 0) {
             return 0;
@@ -694,16 +984,44 @@ public class CoursesPage extends Application {
                     if (rs.next()) {
                         return rs.getInt("studentID");
                     } else {
-                        return 0; // No student record found
+                        // If no student found, try to insert a new student (for testing purposes)
+                        // In a real app, you might handle this differently
+                        return createNewStudent(userId, conn);
                     }
                 }
             }
         }
     }
-    
-    /**
-     * Creates a drop shadow effect with specified radius
-     */
+
+    private int createNewStudent(int userId, Connection conn) throws SQLException {
+        // This is only for testing purposes - in production, students should be created through proper registration
+        String insertQuery = "INSERT INTO Students (studentID, userID) VALUES (?, ?)";
+        try (PreparedStatement pstmt = conn.prepareStatement(insertQuery)) {
+            int newStudentId = getNextAvailableStudentId(conn);
+            pstmt.setInt(1, newStudentId);
+            pstmt.setInt(2, userId);
+            int result = pstmt.executeUpdate();
+            
+            if (result > 0) {
+                System.out.println("Created new student with ID: " + newStudentId + " for user ID: " + userId);
+                return newStudentId;
+            } else {
+                return 0;
+            }
+        } catch (SQLException e) {
+            System.out.println("Failed to create new student: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    private int getNextAvailableStudentId(Connection conn) throws SQLException {
+        String query = "SELECT MAX(studentID) + 1 as nextId FROM Students";
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+            return rs.next() ? Math.max(1, rs.getInt("nextId")) : 1;
+        }
+    }
+
     private DropShadow createDropShadow(double radius) {
         DropShadow dropShadow = new DropShadow();
         dropShadow.setRadius(radius);
@@ -712,10 +1030,7 @@ public class CoursesPage extends Application {
         dropShadow.setColor(Color.rgb(0, 0, 0, 0.2));
         return dropShadow;
     }
-    
-    /**
-     * Helper method to show error alerts
-     */
+
     private void showError(String title, String message) {
         Alert alert = new Alert(AlertType.ERROR);
         alert.setTitle(title);
@@ -723,10 +1038,7 @@ public class CoursesPage extends Application {
         alert.setContentText(message);
         alert.showAndWait();
     }
-    
-    /**
-     * Course data model class
-     */
+
     public static class Course {
         private final int id;
         private final SimpleStringProperty name;
@@ -734,15 +1046,6 @@ public class CoursesPage extends Application {
         private final String lessonContent;
         private final String description;
         
-        /**
-         * Creates a new Course instance
-         * 
-         * @param id The course ID
-         * @param name The name of the course
-         * @param progress The completion progress (0.0 to 1.0)
-         * @param lessonContent The content for the lesson
-         * @param description The course description
-         */
         public Course(int id, String name, double progress, String lessonContent, String description) {
             this.id = id;
             this.name = new SimpleStringProperty(name);
@@ -757,4 +1060,4 @@ public class CoursesPage extends Application {
         public String getLessonContent() { return lessonContent; }
         public String getDescription() { return description; }
     }
-}
+    }
