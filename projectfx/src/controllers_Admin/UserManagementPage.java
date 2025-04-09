@@ -1,5 +1,4 @@
 package controllers_Admin;
-
 import dao.DatabaseConnection;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -17,15 +16,12 @@ import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Modality;
-
 import java.sql.*;
-
 /**
- * User Management page for admin operations on users
- * with database integration and enhanced UI
- */
+* User Management page for admin operations on users
+* with database integration and enhanced UI
+*/
 public class UserManagementPage {
-    
     // UI components that need class-level access
     private TableView<UserData> usersTable;
     private TextField searchField;
@@ -43,14 +39,14 @@ public class UserManagementPage {
     private static final String SUBTEXT_COLOR = "#7f8c8d";
     
     /**
-     * Creates and returns the main view for User Management
-     */
+    * Creates and returns the main view for User Management
+    */
     public Node getView() {
         VBox view = new VBox(20);
         view.setPadding(new Insets(20));
         view.setBackground(new Background(new BackgroundFill(
-                Color.web(BACKGROUND_COLOR), CornerRadii.EMPTY, Insets.EMPTY)));
-        
+            Color.web(BACKGROUND_COLOR), CornerRadii.EMPTY, Insets.EMPTY)));
+            
         // Page header
         BorderPane header = createHeader();
         
@@ -74,8 +70,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Creates the page header with title and actions
-     */
+    * Creates the page header with title and actions
+    */
     private BorderPane createHeader() {
         BorderPane header = new BorderPane();
         header.setPadding(new Insets(0, 0, 10, 0));
@@ -94,7 +90,6 @@ public class UserManagementPage {
             "-fx-text-fill: white;" +
             "-fx-background-radius: 4;"
         );
-        
         addUserBtn.setOnAction(e -> showAddUserDialog());
         
         header.setLeft(title);
@@ -104,8 +99,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Creates statistics cards showing user counts
-     */
+    * Creates statistics cards showing user counts
+    */
     private HBox createStatsCards() {
         HBox statsCards = new HBox(15);
         statsCards.setPadding(new Insets(0, 0, 10, 0));
@@ -128,16 +123,16 @@ public class UserManagementPage {
     }
     
     /**
-     * Creates an individual statistics card
-     */
+    * Creates an individual statistics card
+    */
     private VBox createStatsCard(String label, String value, String color) {
         VBox card = new VBox(5);
         card.setPadding(new Insets(15));
         card.setPrefWidth(180);
         card.setAlignment(Pos.CENTER_LEFT);
         card.setBackground(new Background(new BackgroundFill(
-                Color.web(CARD_COLOR), new CornerRadii(8), Insets.EMPTY)));
-        
+            Color.web(CARD_COLOR), new CornerRadii(8), Insets.EMPTY)));
+            
         // Add drop shadow effect
         DropShadow dropShadow = new DropShadow();
         dropShadow.setRadius(5.0);
@@ -150,11 +145,9 @@ public class UserManagementPage {
         StackPane iconContainer = new StackPane();
         Circle circle = new Circle(20);
         circle.setFill(Color.web(color).deriveColor(1, 1, 1, 0.2));
-        
         Label iconLabel = new Label(label.substring(0, 1).toUpperCase());
         iconLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         iconLabel.setTextFill(Color.web(color));
-        
         iconContainer.getChildren().addAll(circle, iconLabel);
         
         // Create stats value and label
@@ -169,25 +162,23 @@ public class UserManagementPage {
         
         HBox contentBox = new HBox(15);
         contentBox.setAlignment(Pos.CENTER_LEFT);
-        
         VBox textBox = new VBox(2);
         textBox.getChildren().addAll(valueLabel, nameLabel);
-        
         contentBox.getChildren().addAll(iconContainer, textBox);
-        card.getChildren().add(contentBox);
         
+        card.getChildren().add(contentBox);
         return card;
     }
     
     /**
-     * Creates the search controls card
-     */
+    * Creates the search controls card
+    */
     private VBox createSearchCard() {
         VBox searchCard = new VBox(15);
         searchCard.setPadding(new Insets(15));
         searchCard.setBackground(new Background(new BackgroundFill(
-                Color.web(CARD_COLOR), new CornerRadii(8), Insets.EMPTY)));
-        
+            Color.web(CARD_COLOR), new CornerRadii(8), Insets.EMPTY)));
+            
         // Add drop shadow effect
         DropShadow dropShadow = new DropShadow();
         dropShadow.setRadius(5.0);
@@ -254,14 +245,14 @@ public class UserManagementPage {
     }
     
     /**
-     * Creates the table card with users data
-     */
+    * Creates the table card with users data
+    */
     private VBox createTableCard() {
         VBox tableCard = new VBox(15);
         tableCard.setPadding(new Insets(15));
         tableCard.setBackground(new Background(new BackgroundFill(
-                Color.web(CARD_COLOR), new CornerRadii(8), Insets.EMPTY)));
-        
+            Color.web(CARD_COLOR), new CornerRadii(8), Insets.EMPTY)));
+            
         // Add drop shadow effect
         DropShadow dropShadow = new DropShadow();
         dropShadow.setRadius(5.0);
@@ -288,8 +279,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Creates the users table
-     */
+    * Creates the users table
+    */
     private TableView<UserData> createUsersTable() {
         TableView<UserData> table = new TableView<>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
@@ -325,7 +316,6 @@ public class UserManagementPage {
                 } else {
                     HBox container = new HBox(5);
                     container.setAlignment(Pos.CENTER_LEFT);
-                    
                     Circle roleIndicator = new Circle(5);
                     
                     if (item.equalsIgnoreCase("Admin")) {
@@ -338,7 +328,6 @@ public class UserManagementPage {
                     
                     Label roleLabel = new Label(item);
                     container.getChildren().addAll(roleIndicator, roleLabel);
-                    
                     setGraphic(container);
                 }
             }
@@ -351,7 +340,6 @@ public class UserManagementPage {
             private final HBox actionContainer = new HBox(8);
             private final Button editBtn = new Button("Edit");
             private final Button resetPassBtn = new Button("Reset Password");
-            private final Button deleteBtn = new Button("Delete");
             
             {
                 actionContainer.setAlignment(Pos.CENTER);
@@ -364,12 +352,6 @@ public class UserManagementPage {
                 
                 resetPassBtn.setStyle(
                     "-fx-background-color: #f39c12;" +
-                    "-fx-text-fill: white;" +
-                    "-fx-background-radius: 4;"
-                );
-                
-                deleteBtn.setStyle(
-                    "-fx-background-color: " + DANGER_COLOR + ";" +
                     "-fx-text-fill: white;" +
                     "-fx-background-radius: 4;"
                 );
@@ -389,14 +371,7 @@ public class UserManagementPage {
                     }
                 });
                 
-                deleteBtn.setOnAction(e -> {
-                    UserData user = getTableRow().getItem();
-                    if (user != null) {
-                        showDeleteConfirmation(user);
-                    }
-                });
-                
-                actionContainer.getChildren().addAll(editBtn, resetPassBtn, deleteBtn);
+                actionContainer.getChildren().addAll(editBtn, resetPassBtn);
             }
             
             @Override
@@ -416,8 +391,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Creates pagination controls
-     */
+    * Creates pagination controls
+    */
     private HBox createPaginationControls() {
         HBox pagination = new HBox(10);
         pagination.setPadding(new Insets(10, 0, 0, 0));
@@ -455,8 +430,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Filter table data based on search text and role filter
-     */
+    * Filter table data based on search text and role filter
+    */
     private void filterData() {
         String searchText = searchField.getText().toLowerCase();
         String role = roleFilter.getValue();
@@ -487,8 +462,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Load users from database using DatabaseConnection class
-     */
+    * Load users from database using DatabaseConnection class
+    */
     private void loadUsersFromDatabase() {
         masterData.clear();
         
@@ -510,7 +485,6 @@ public class UserManagementPage {
             }
             
             updateStatsCounts();
-            
         } catch (SQLException e) {
             showErrorDialog("Database Error", "Failed to load users from database", e.getMessage());
             e.printStackTrace();
@@ -518,8 +492,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Update the counts in the stats cards
-     */
+    * Update the counts in the stats cards
+    */
     private void updateStatsCounts() {
         int totalCount = 0;
         int studentCount = 0;
@@ -552,8 +526,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Show dialog to add a new user
-     */
+    * Show dialog to add a new user
+    */
     private void showAddUserDialog() {
         Dialog<UserData> dialog = new Dialog<>();
         dialog.setTitle("Add New User");
@@ -562,12 +536,11 @@ public class UserManagementPage {
         BorderPane header = new BorderPane();
         header.setPadding(new Insets(15));
         header.setBackground(new Background(new BackgroundFill(
-                Color.web(PRIMARY_COLOR), CornerRadii.EMPTY, Insets.EMPTY)));
-        
+            Color.web(PRIMARY_COLOR), CornerRadii.EMPTY, Insets.EMPTY)));
+            
         Label headerLabel = new Label("Add New User");
         headerLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
         headerLabel.setTextFill(Color.WHITE);
-        
         header.setCenter(headerLabel);
         
         // Set the button types
@@ -623,7 +596,6 @@ public class UserManagementPage {
         // Create content pane with header and form
         VBox content = new VBox();
         content.getChildren().addAll(header, grid);
-        
         dialog.getDialogPane().setContent(content);
         
         // Request focus on the username field by default
@@ -648,7 +620,6 @@ public class UserManagementPage {
                         loadUsersFromDatabase(); // Refresh the data
                         return new UserData("0", username, email, role);
                     }
-                    
                 } catch (Exception e) {
                     showErrorDialog("Input Error", "Invalid input", e.getMessage());
                 }
@@ -660,8 +631,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Show dialog to add a new instructor
-     */
+    * Show dialog to add a new instructor
+    */
     private void showAddInstructorDialog() {
         Dialog<UserData> dialog = new Dialog<>();
         dialog.setTitle("Add New Instructor");
@@ -670,12 +641,11 @@ public class UserManagementPage {
         BorderPane header = new BorderPane();
         header.setPadding(new Insets(15));
         header.setBackground(new Background(new BackgroundFill(
-                Color.web(SECONDARY_COLOR), CornerRadii.EMPTY, Insets.EMPTY)));
-        
+            Color.web(SECONDARY_COLOR), CornerRadii.EMPTY, Insets.EMPTY)));
+            
         Label headerLabel = new Label("Add New Instructor");
         headerLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
         headerLabel.setTextFill(Color.WHITE);
-        
         header.setCenter(headerLabel);
         
         // Set the button types
@@ -721,7 +691,6 @@ public class UserManagementPage {
         // Create content pane with header and form
         VBox content = new VBox();
         content.getChildren().addAll(header, grid);
-        
         dialog.getDialogPane().setContent(content);
         
         // Request focus on the username field by default
@@ -745,7 +714,6 @@ public class UserManagementPage {
                         loadUsersFromDatabase(); // Refresh the data
                         return new UserData("0", username, email, "Instructor");
                     }
-                    
                 } catch (Exception e) {
                     showErrorDialog("Input Error", "Invalid input", e.getMessage());
                 }
@@ -757,8 +725,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Show dialog to edit an existing user
-     */
+    * Show dialog to edit an existing user
+    */
     private void showEditUserDialog(UserData user) {
         Dialog<UserData> dialog = new Dialog<>();
         dialog.setTitle("Edit User");
@@ -767,12 +735,11 @@ public class UserManagementPage {
         BorderPane header = new BorderPane();
         header.setPadding(new Insets(15));
         header.setBackground(new Background(new BackgroundFill(
-                Color.web(PRIMARY_COLOR), CornerRadii.EMPTY, Insets.EMPTY)));
-        
+            Color.web(PRIMARY_COLOR), CornerRadii.EMPTY, Insets.EMPTY)));
+            
         Label headerLabel = new Label("Edit User: " + user.getUsername());
         headerLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
         headerLabel.setTextFill(Color.WHITE);
-        
         header.setCenter(headerLabel);
         
         // Set the button types
@@ -815,7 +782,6 @@ public class UserManagementPage {
         // Create content pane with header and form
         VBox content = new VBox();
         content.getChildren().addAll(header, grid);
-        
         dialog.getDialogPane().setContent(content);
         
         // Convert the result to a UserData when the save button is clicked
@@ -836,7 +802,6 @@ public class UserManagementPage {
                         loadUsersFromDatabase(); // Refresh the data
                         return user;
                     }
-                    
                 } catch (Exception e) {
                     showErrorDialog("Input Error", "Invalid input", e.getMessage());
                 }
@@ -848,8 +813,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Show dialog to reset user password
-     */
+    * Show dialog to reset user password
+    */
     private void showResetPasswordDialog(UserData user) {
         Dialog<String> dialog = new Dialog<>();
         dialog.setTitle("Reset Password");
@@ -858,12 +823,11 @@ public class UserManagementPage {
         BorderPane header = new BorderPane();
         header.setPadding(new Insets(15));
         header.setBackground(new Background(new BackgroundFill(
-                Color.web("#f39c12"), CornerRadii.EMPTY, Insets.EMPTY)));
-        
+            Color.web("#f39c12"), CornerRadii.EMPTY, Insets.EMPTY)));
+            
         Label headerLabel = new Label("Reset Password: " + user.getUsername());
         headerLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
         headerLabel.setTextFill(Color.WHITE);
-        
         header.setCenter(headerLabel);
         
         // Set the button types
@@ -899,7 +863,6 @@ public class UserManagementPage {
         // Create content pane with header and form
         VBox content = new VBox();
         content.getChildren().addAll(header, grid);
-        
         dialog.getDialogPane().setContent(content);
         
         // Request focus on the new password field by default
@@ -925,7 +888,6 @@ public class UserManagementPage {
                     if (resetPasswordInDatabase(user.getId(), newPassword)) {
                         return newPassword;
                     }
-                    
                 } catch (Exception e) {
                     showErrorDialog("Input Error", "Invalid input", e.getMessage());
                 }
@@ -937,29 +899,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Show confirmation dialog before deleting a user
-     */
-    private void showDeleteConfirmation(UserData user) {
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Confirm Delete");
-        alert.setHeaderText("Are you sure you want to delete this user?");
-        alert.setContentText("Username: " + user.getUsername() + "\nEmail: " + user.getEmail() + "\nRole: " + user.getRole());
-        
-        ButtonType deleteButton = new ButtonType("Delete", ButtonBar.ButtonData.OK_DONE);
-        ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
-        alert.getButtonTypes().setAll(deleteButton, cancelButton);
-        
-        alert.showAndWait().ifPresent(response -> {
-            if (response == deleteButton) {
-                deleteUserFromDatabase(user.getId());
-                loadUsersFromDatabase(); // Refresh the data
-            }
-        });
-    }
-    
-    /**
-     * Add a new user to the database
-     */
+    * Add a new user to the database
+    */
     private boolean addUserToDatabase(String username, String email, String password, String role) {
         Connection conn = null;
         try {
@@ -967,8 +908,7 @@ public class UserManagementPage {
             conn.setAutoCommit(false); // Start transaction
             
             // Insert into Users table
-            String userQuery = "INSERT INTO Users (username, email, passwordHash, role) VALUES (?, ?, ?, ?)";
-            
+            String userQuery = "INSERT INTO Users (username, email, password, role) VALUES (?, ?, ?, ?)";
             try (PreparedStatement pstmt = conn.prepareStatement(userQuery, Statement.RETURN_GENERATED_KEYS)) {
                 pstmt.setString(1, username);
                 pstmt.setString(2, email);
@@ -976,7 +916,6 @@ public class UserManagementPage {
                 pstmt.setString(4, role);
                 
                 int affectedRows = pstmt.executeUpdate();
-                
                 if (affectedRows == 0) {
                     throw new SQLException("Creating user failed, no rows affected.");
                 }
@@ -1027,8 +966,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Insert a new student record
-     */
+    * Insert a new student record
+    */
     private void insertStudent(Connection conn, int userId) throws SQLException {
         String query = "INSERT INTO Students (studentID, userID) VALUES (?, ?)";
         try (PreparedStatement pstmt = conn.prepareStatement(query)) {
@@ -1039,8 +978,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Insert a new instructor record
-     */
+    * Insert a new instructor record
+    */
     private void insertInstructor(Connection conn, int userId) throws SQLException {
         String query = "INSERT INTO Instructor (instructorID, userID) VALUES (?, ?)";
         try (PreparedStatement pstmt = conn.prepareStatement(query)) {
@@ -1051,8 +990,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Insert a new admin record
-     */
+    * Insert a new admin record
+    */
     private void insertAdmin(Connection conn, int userId) throws SQLException {
         String query = "INSERT INTO Admin (adminID, userID) VALUES (?, ?)";
         try (PreparedStatement pstmt = conn.prepareStatement(query)) {
@@ -1063,8 +1002,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Update an existing user in the database
-     */
+    * Update an existing user in the database
+    */
     private boolean updateUserInDatabase(String userId, String username, String email, String role) {
         Connection conn = null;
         try {
@@ -1074,7 +1013,6 @@ public class UserManagementPage {
             // First, check the current role
             String currentRoleQuery = "SELECT role FROM Users WHERE userID = ?";
             String currentRole = "";
-            
             try (PreparedStatement pstmt = conn.prepareStatement(currentRoleQuery)) {
                 pstmt.setInt(1, Integer.parseInt(userId));
                 try (ResultSet rs = pstmt.executeQuery()) {
@@ -1088,7 +1026,6 @@ public class UserManagementPage {
             
             // Update user information
             String updateQuery = "UPDATE Users SET username = ?, email = ?, role = ? WHERE userID = ?";
-            
             try (PreparedStatement pstmt = conn.prepareStatement(updateQuery)) {
                 pstmt.setString(1, username);
                 pstmt.setString(2, email);
@@ -1096,7 +1033,6 @@ public class UserManagementPage {
                 pstmt.setInt(4, Integer.parseInt(userId));
                 
                 int affectedRows = pstmt.executeUpdate();
-                
                 if (affectedRows == 0) {
                     throw new SQLException("Updating user failed, no rows affected.");
                 }
@@ -1150,19 +1086,42 @@ public class UserManagementPage {
     }
     
     /**
-     * Remove a student record
-     */
+    * Remove a student record along with related activity records
+    */
     private void removeStudent(Connection conn, int userId) throws SQLException {
-        String query = "DELETE FROM Students WHERE userID = ?";
-        try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+        int studentId = -1;
+        
+        // Step 1: Get studentID from userID
+        String fetchStudentIdQuery = "SELECT studentID FROM Students WHERE userID = ?";
+        try (PreparedStatement pstmt = conn.prepareStatement(fetchStudentIdQuery)) {
             pstmt.setInt(1, userId);
-            pstmt.executeUpdate();
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    studentId = rs.getInt("studentID");
+                }
+            }
+        }
+        
+        if (studentId != -1) {
+            // Step 2: Delete activities associated with this studentID
+            String deleteActivitiesQuery = "DELETE FROM activities WHERE studentID = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(deleteActivitiesQuery)) {
+                pstmt.setInt(1, studentId);
+                pstmt.executeUpdate();
+            }
+            
+            // Step 3: Delete student record
+            String deleteStudentQuery = "DELETE FROM Students WHERE studentID = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(deleteStudentQuery)) {
+                pstmt.setInt(1, studentId);
+                pstmt.executeUpdate();
+            }
         }
     }
     
     /**
-     * Remove an instructor record
-     */
+    * Remove an instructor record
+    */
     private void removeInstructor(Connection conn, int userId) throws SQLException {
         String query = "DELETE FROM Instructor WHERE userID = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(query)) {
@@ -1172,8 +1131,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Remove an admin record
-     */
+    * Remove an admin record
+    */
     private void removeAdmin(Connection conn, int userId) throws SQLException {
         String query = "DELETE FROM Admin WHERE userID = ?";
         try (PreparedStatement pstmt = conn.prepareStatement(query)) {
@@ -1183,22 +1142,19 @@ public class UserManagementPage {
     }
     
     /**
-     * Reset a user's password in the database
-     */
+    * Reset a user's password in the database
+    */
     private boolean resetPasswordInDatabase(String userId, String newPassword) {
         try (Connection conn = DatabaseConnection.getConnection()) {
-            String query = "UPDATE Users SET passwordHash = ? WHERE userID = ?";
-            
+            String query = "UPDATE Users SET password = ? WHERE userID = ?";
             try (PreparedStatement pstmt = conn.prepareStatement(query)) {
                 pstmt.setString(1, newPassword); // In a real app, you'd hash this
                 pstmt.setInt(2, Integer.parseInt(userId));
                 
                 int affectedRows = pstmt.executeUpdate();
-                
                 if (affectedRows == 0) {
                     throw new SQLException("Resetting password failed, no rows affected.");
                 }
-                
                 return true;
             }
         } catch (SQLException e) {
@@ -1209,35 +1165,8 @@ public class UserManagementPage {
     }
     
     /**
-     * Delete a user from the database
-     */
-    private boolean deleteUserFromDatabase(String userId) {
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            // Due to foreign key constraints with ON DELETE CASCADE,
-            // we only need to delete from the Users table
-            String query = "DELETE FROM Users WHERE userID = ?";
-            
-            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
-                pstmt.setInt(1, Integer.parseInt(userId));
-                
-                int affectedRows = pstmt.executeUpdate();
-                
-                if (affectedRows == 0) {
-                    throw new SQLException("Deleting user failed, no rows affected.");
-                }
-                
-                return true;
-            }
-        } catch (SQLException e) {
-            showErrorDialog("Database Error", "Failed to delete user", e.getMessage());
-            e.printStackTrace();
-            return false;
-        }
-    }
-    
-    /**
-     * Show an error dialog with details
-     */
+    * Show an error dialog with details
+    */
     private void showErrorDialog(String title, String header, String content) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle(title);
@@ -1247,8 +1176,8 @@ public class UserManagementPage {
     }
     
     /**
-     * User data model class with JavaFX properties for TableView
-     */
+    * User data model class with JavaFX properties for TableView
+    */
     public static class UserData {
         private final SimpleStringProperty id;
         private final SimpleStringProperty username;

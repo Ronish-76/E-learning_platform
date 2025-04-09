@@ -1,5 +1,6 @@
 package controllers_students;
 
+import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
@@ -17,7 +18,6 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
 import javafx.util.Callback;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import javafx.scene.control.Alert.AlertType;
 import dao.DatabaseConnection;
 
@@ -57,7 +58,6 @@ public class AssignmentsPage {
                 showError("Database Error", "Error retrieving student ID: " + e.getMessage());
             }
         }
-        
         loadSubjectsAndAssignments();
         currentSubject.addListener((observable, oldValue, newValue) -> updateContent(newValue));
     }
@@ -73,13 +73,11 @@ public class AssignmentsPage {
             this.currentUser = loggedInUser;
             this.currentUserId = loggedInUser.getUserID();
         }
-        
         try {
             this.studentId = getStudentId(currentUserId);
         } catch (SQLException e) {
             showError("Database Error", "Error retrieving student ID: " + e.getMessage());
         }
-        
         loadSubjectsAndAssignments();
         currentSubject.addListener((observable, oldValue, newValue) -> updateContent(newValue));
     }
@@ -89,7 +87,6 @@ public class AssignmentsPage {
      */
     private void loadSubjectsAndAssignments() {
         subjectDataMap.clear();
-        
         if (studentId <= 0) {
             showError("Authentication Error", "Please log in to view your assignments");
             return;
@@ -104,13 +101,11 @@ public class AssignmentsPage {
                 "JOIN Enrollments e ON c.courseID = e.courseID " +
                 "WHERE e.studentID = ? " +
                 "ORDER BY e.periodNumber";
-            
+                
             try (PreparedStatement pstmt = conn.prepareStatement(subjectQuery)) {
                 pstmt.setInt(1, studentId);
-                
                 try (ResultSet rs = pstmt.executeQuery()) {
                     boolean hasSubjects = false;
-                    
                     while (rs.next()) {
                         hasSubjects = true;
                         int courseId = rs.getInt("courseID");
@@ -150,17 +145,16 @@ public class AssignmentsPage {
         
         try (Connection conn = DatabaseConnection.getConnection()) {
             String query = 
-                "SELECT a.assignmentID, a.title, a.dueDate, ap.status, " +
+                "SELECT a.assignmentID, a.title, a.dueDate, ap.status, ap.content, " +
                 "a.points, a.priority, a.description " +
                 "FROM Assignments a " +
                 "LEFT JOIN AssignmentProgress ap ON a.assignmentID = ap.assignmentID AND ap.studentID = ? " +
                 "WHERE a.courseID = ? " +
                 "ORDER BY a.dueDate";
-            
+                
             try (PreparedStatement pstmt = conn.prepareStatement(query)) {
                 pstmt.setInt(1, studentId);
                 pstmt.setInt(2, courseId);
-                
                 try (ResultSet rs = pstmt.executeQuery()) {
                     while (rs.next()) {
                         int assignmentId = rs.getInt("assignmentID");
@@ -173,11 +167,12 @@ public class AssignmentsPage {
                             status = "Not started";
                         }
                         
+                        String content = rs.getString("content"); // Get submitted content if available
                         String points = rs.getString("points");
                         String priority = rs.getString("priority");
                         String description = rs.getString("description");
                         
-                        Assignment assignment = new Assignment(assignmentId, title, dueDate, status, points, priority, description);
+                        Assignment assignment = new Assignment(assignmentId, title, dueDate, status, points, priority, description, content);
                         assignments.add(assignment);
                     }
                 }
@@ -339,7 +334,6 @@ public class AssignmentsPage {
         Label titleLabel = new Label("My Assignments");
         titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 22));
         titleLabel.setTextFill(Color.web("#2c3e50"));
-        
         titleBar.setLeft(titleLabel);
         
         // Only show subject selector if we have subjects
@@ -475,8 +469,8 @@ public class AssignmentsPage {
         VBox completedTile = createStatTile("Completed", String.valueOf(completed), "#2ecc71");
         
         statTiles.getChildren().addAll(totalTile, notStartedTile, inProgressTile, completedTile);
-        
         summarySection.getChildren().addAll(summaryLabel, statTiles);
+        
         return summarySection;
     }
     
@@ -499,6 +493,7 @@ public class AssignmentsPage {
         descLabel.setTextFill(Color.web("#7f8c8d"));
         
         tile.getChildren().addAll(valueLabel, descLabel);
+        
         return tile;
     }
     
@@ -517,19 +512,17 @@ public class AssignmentsPage {
         assignmentsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
         assignmentsLabel.setTextFill(Color.web("#2c3e50"));
         
-        Button addButton = new Button("+ Add Assignment");
-        addButton.setFont(Font.font("Arial", 12));
-        addButton.setOnAction(e -> addNewAssignment(data.getSubjectName()));
-        
+  
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        headerBox.getChildren().addAll(assignmentsLabel, spacer, addButton);
-        
+        headerBox.getChildren().addAll(assignmentsLabel, spacer);
+       
         // Create assignments table with improved styling
         TableView<Assignment> assignmentsTable = createStyledTable(data);
         
         assignmentsSection.getChildren().addAll(headerBox, assignmentsTable);
+        
         return assignmentsSection;
     }
     
@@ -604,7 +597,6 @@ public class AssignmentsPage {
                 } else {
                     HBox statusBox = new HBox(5);
                     statusBox.setAlignment(Pos.CENTER_LEFT);
-                    
                     Circle statusIndicator = new Circle(5);
                     if (item.equalsIgnoreCase("Not started")) {
                         statusIndicator.setFill(Color.web("#e74c3c"));
@@ -615,7 +607,6 @@ public class AssignmentsPage {
                     } else {
                         statusIndicator.setFill(Color.web("#95a5a6"));
                     }
-                    
                     Label statusLabel = new Label(item);
                     statusBox.getChildren().addAll(statusIndicator, statusLabel);
                     setGraphic(statusBox);
@@ -653,36 +644,44 @@ public class AssignmentsPage {
             }
         });
         
-        // Actions column with buttons
+        // Actions column with start assignment button
         TableColumn<Assignment, Void> actionsColumn = new TableColumn<>("Actions");
         actionsColumn.setPrefWidth(150);
         actionsColumn.setCellFactory(param -> new TableCell<>() {
-            private final HBox buttonsBox = new HBox(5);
-            private final Button viewButton = new Button("View");
-            private final Button editButton = new Button("Edit");
+            private final Button startButton = new Button("Start Assignment");
             
             {
-                viewButton.setOnAction(event -> {
+                startButton.setOnAction(event -> {
                     Assignment assignment = getTableView().getItems().get(getIndex());
-                    viewAssignment(assignment);
+                    startAssignment(assignment);
                 });
                 
-                editButton.setOnAction(event -> {
-                    Assignment assignment = getTableView().getItems().get(getIndex());
-                    editAssignment(assignment);
-                });
-                
-                // Style the buttons
-                viewButton.setPrefWidth(60);
-                editButton.setPrefWidth(60);
-                buttonsBox.getChildren().addAll(viewButton, editButton);
-                buttonsBox.setAlignment(Pos.CENTER);
+                // Style the button
+                startButton.setPrefWidth(120);
+                startButton.setStyle("-fx-background-color: #3498db; -fx-text-fill: white;");
             }
             
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                setGraphic(empty ? null : buttonsBox);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    setGraphic(startButton);
+                    
+                    // Update button text based on assignment status
+                    Assignment assignment = getTableView().getItems().get(getIndex());
+                    if (assignment.getStatus().equalsIgnoreCase("Completed")) {
+                        startButton.setText("View Assignment");
+                        startButton.setStyle("-fx-background-color: #2ecc71; -fx-text-fill: white;");
+                    } else if (assignment.getStatus().equalsIgnoreCase("In progress")) {
+                        startButton.setText("Continue");
+                        startButton.setStyle("-fx-background-color: #f39c12; -fx-text-fill: white;");
+                    } else {
+                        startButton.setText("Start Assignment");
+                        startButton.setStyle("-fx-background-color: #3498db; -fx-text-fill: white;");
+                    }
+                }
             }
         });
         
@@ -699,10 +698,10 @@ public class AssignmentsPage {
     }
     
     /**
-     * Shows assignment details in a styled dialog
+     * Shows assignment details with submission option
      */
-    private void viewAssignment(Assignment assignment) {
-        Dialog<Void> dialog = new Dialog<>();
+    private void startAssignment(Assignment assignment) {
+        Dialog<String> dialog = new Dialog<>();
         dialog.setTitle("Assignment Details");
         dialog.setHeaderText(null);
         
@@ -719,30 +718,33 @@ public class AssignmentsPage {
         header.getChildren().add(titleLabel);
         
         // Create content
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(15);
-        grid.setPadding(new Insets(20));
+        VBox contentBox = new VBox(15);
+        contentBox.setPadding(new Insets(20));
+        
+        // Assignment details section
+        GridPane detailsGrid = new GridPane();
+        detailsGrid.setHgap(10);
+        detailsGrid.setVgap(15);
+        detailsGrid.setPadding(new Insets(0, 0, 15, 0));
         
         // Row 0
         Label dueDateHeader = new Label("Due Date");
         dueDateHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
         dueDateHeader.setTextFill(Color.web("#7f8c8d"));
-        grid.add(dueDateHeader, 0, 0);
+        detailsGrid.add(dueDateHeader, 0, 0);
         
         Label statusHeader = new Label("Status");
         statusHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
         statusHeader.setTextFill(Color.web("#7f8c8d"));
-        grid.add(statusHeader, 1, 0);
+        detailsGrid.add(statusHeader, 1, 0);
         
         // Row 1
         Label dueDateValue = new Label(assignment.getFormattedDueDate());
         dueDateValue.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        grid.add(dueDateValue, 0, 1);
+        detailsGrid.add(dueDateValue, 0, 1);
         
         HBox statusBox = new HBox(5);
         statusBox.setAlignment(Pos.CENTER_LEFT);
-        
         Circle statusIndicator = new Circle(5);
         if (assignment.getStatus().equalsIgnoreCase("Not started")) {
             statusIndicator.setFill(Color.web("#e74c3c"));
@@ -751,27 +753,26 @@ public class AssignmentsPage {
         } else if (assignment.getStatus().equalsIgnoreCase("Completed")) {
             statusIndicator.setFill(Color.web("#2ecc71"));
         }
-        
         Label statusLabel = new Label(assignment.getStatus());
         statusLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         statusBox.getChildren().addAll(statusIndicator, statusLabel);
-        grid.add(statusBox, 1, 1);
+        detailsGrid.add(statusBox, 1, 1);
         
         // Row 2
         Label pointsHeader = new Label("Points");
         pointsHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
         pointsHeader.setTextFill(Color.web("#7f8c8d"));
-        grid.add(pointsHeader, 0, 2);
+        detailsGrid.add(pointsHeader, 0, 2);
         
         Label priorityHeader = new Label("Priority");
         priorityHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
         priorityHeader.setTextFill(Color.web("#7f8c8d"));
-        grid.add(priorityHeader, 1, 2);
+        detailsGrid.add(priorityHeader, 1, 2);
         
         // Row 3
         Label pointsValue = new Label(assignment.getPoints());
         pointsValue.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        grid.add(pointsValue, 0, 3);
+        detailsGrid.add(pointsValue, 0, 3);
         
         Label priorityValue = new Label(assignment.getPriority());
         priorityValue.setFont(Font.font("Arial", FontWeight.BOLD, 16));
@@ -782,94 +783,118 @@ public class AssignmentsPage {
         } else {
             priorityValue.setTextFill(Color.web("#2ecc71"));
         }
-        grid.add(priorityValue, 1, 3);
+        detailsGrid.add(priorityValue, 1, 3);
         
-        // Add description section
+        // Description section
         Label descriptionHeader = new Label("Description");
-        descriptionHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        descriptionHeader.setTextFill(Color.web("#7f8c8d"));
-        grid.add(descriptionHeader, 0, 4, 2, 1);
+        descriptionHeader.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        descriptionHeader.setTextFill(Color.web("#2c3e50"));
         
         TextArea descriptionArea = new TextArea(assignment.getDescription());
         descriptionArea.setWrapText(true);
-        descriptionArea.setPrefHeight(100);
+        descriptionArea.setPrefHeight(80);
         descriptionArea.setEditable(false);
-        grid.add(descriptionArea, 0, 5, 2, 1);
+        descriptionArea.setStyle("-fx-control-inner-background: #f9f9f9;");
         
-        // Create buttons for action
-        HBox buttonBox = new HBox(10);
-        buttonBox.setAlignment(Pos.CENTER_RIGHT);
-        buttonBox.setPadding(new Insets(10, 0, 0, 0));
+        // Submission section
+        Label submissionHeader = new Label("Your Submission");
+        submissionHeader.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        submissionHeader.setTextFill(Color.web("#2c3e50"));
         
-        Button completeButton = new Button("Mark as Complete");
-        Button closeButton = new Button("Close");
+        TextArea submissionArea = new TextArea();
+        submissionArea.setWrapText(true);
+        submissionArea.setPrefHeight(150);
         
-        completeButton.setDefaultButton(true);
-        closeButton.setCancelButton(true);
+        // Pre-fill with existing content if available
+        if (assignment.getContent() != null && !assignment.getContent().isEmpty()) {
+            submissionArea.setText(assignment.getContent());
+        }
         
-        // Add action to the complete button
-        completeButton.setOnAction(e -> {
-            updateAssignmentStatus(assignment.getId(), "Completed");
-            dialog.close();
+        // Set readonly if already completed
+        if (assignment.getStatus().equalsIgnoreCase("Completed")) {
+            submissionArea.setEditable(false);
+            submissionArea.setStyle("-fx-control-inner-background: #f9f9f9;");
+        } else {
+            submissionArea.setPromptText("Enter your submission here...");
+        }
+        
+        // Add all components to content box
+        contentBox.getChildren().addAll(
+            detailsGrid,
+            descriptionHeader,
+            descriptionArea,
+            submissionHeader,
+            submissionArea
+        );
+        
+        // Create buttons for actions
+        ButtonType submitButtonType = new ButtonType("Submit", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancelButtonType = ButtonType.CANCEL;
+        
+        dialog.getDialogPane().getButtonTypes().addAll(submitButtonType, cancelButtonType);
+        
+        // Only show submit button if not completed
+        if (assignment.getStatus().equalsIgnoreCase("Completed")) {
+            Node submitButton = dialog.getDialogPane().lookupButton(submitButtonType);
+            submitButton.setVisible(false);
+        }
+        
+        // Combine all components
+        VBox dialogContent = new VBox();
+        dialogContent.getChildren().addAll(header, contentBox);
+        dialog.getDialogPane().setContent(dialogContent);
+        
+        // Convert the result
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == submitButtonType) {
+                return submissionArea.getText();
+            }
+            return null;
+        });
+        
+        // Handle the result
+        Optional<String> result = dialog.showAndWait();
+        
+        result.ifPresent(content -> {
+            // Save the content and update status
+            saveAssignmentContent(assignment.getId(), content);
             
-            // Refresh the view after status update
+            // Refresh the view
             loadSubjectsAndAssignments();
             updateContent(currentSubject.get());
         });
-        
-        buttonBox.getChildren().addAll(completeButton, closeButton);
-        
-        // Add all components to a main content box
-        VBox contentBox = new VBox(10);
-        contentBox.getChildren().addAll(grid, buttonBox);
-        
-        // Set the dialog content
-        VBox dialogContent = new VBox();
-        dialogContent.getChildren().addAll(header, contentBox);
-        
-        dialog.getDialogPane().setContent(dialogContent);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.getDialogPane().lookupButton(ButtonType.CLOSE).setVisible(false);
-        
-        closeButton.setOnAction(e -> dialog.close());
-        
-        dialog.showAndWait();
     }
     
     /**
-     * Updates the status of an assignment in the database
+     * Saves assignment content and updates status to Completed
      */
-    private void updateAssignmentStatus(int assignmentId, String newStatus) {
+    private void saveAssignmentContent(int assignmentId, String content) {
         try (Connection conn = DatabaseConnection.getConnection()) {
-            // First check if a record already exists
+            // Check if a record already exists
             String checkQuery = "SELECT * FROM AssignmentProgress WHERE assignmentID = ? AND studentID = ?";
-            
             try (PreparedStatement pstmt = conn.prepareStatement(checkQuery)) {
                 pstmt.setInt(1, assignmentId);
                 pstmt.setInt(2, studentId);
-                
                 ResultSet rs = pstmt.executeQuery();
                 
                 if (rs.next()) {
                     // Update existing record
-                    String updateQuery = "UPDATE AssignmentProgress SET status = ?, lastUpdated = CURRENT_TIMESTAMP " +
-                                        "WHERE assignmentID = ? AND studentID = ?";
-                    
+                    String updateQuery = "UPDATE AssignmentProgress SET content = ?, status = 'Completed', lastUpdated = CURRENT_TIMESTAMP " +
+                                         "WHERE assignmentID = ? AND studentID = ?";
                     try (PreparedStatement updateStmt = conn.prepareStatement(updateQuery)) {
-                        updateStmt.setString(1, newStatus);
+                        updateStmt.setString(1, content);
                         updateStmt.setInt(2, assignmentId);
                         updateStmt.setInt(3, studentId);
                         updateStmt.executeUpdate();
                     }
                 } else {
                     // Insert new record
-                    String insertQuery = "INSERT INTO AssignmentProgress (assignmentID, studentID, status, lastUpdated) " +
-                                        "VALUES (?, ?, ?, CURRENT_TIMESTAMP)";
-                    
+                    String insertQuery = "INSERT INTO AssignmentProgress (assignmentID, studentID, content, status, lastUpdated) " +
+                                         "VALUES (?, ?, ?, 'Completed', CURRENT_TIMESTAMP)";
                     try (PreparedStatement insertStmt = conn.prepareStatement(insertQuery)) {
                         insertStmt.setInt(1, assignmentId);
                         insertStmt.setInt(2, studentId);
-                        insertStmt.setString(3, newStatus);
+                        insertStmt.setString(3, content);
                         insertStmt.executeUpdate();
                     }
                 }
@@ -877,27 +902,15 @@ public class AssignmentsPage {
             
             // Show success message
             Alert alert = new Alert(AlertType.INFORMATION);
-            alert.setTitle("Status Updated");
-            alert.setHeaderText("Assignment Status Updated");
-            alert.setContentText("The assignment status has been updated to: " + newStatus);
+            alert.setTitle("Assignment Submitted");
+            alert.setHeaderText("Success");
+            alert.setContentText("Your assignment has been submitted successfully and marked as completed.");
             alert.showAndWait();
             
         } catch (SQLException e) {
-            showError("Database Error", "Error updating assignment status: " + e.getMessage());
+            showError("Database Error", "Error saving assignment: " + e.getMessage());
             e.printStackTrace();
         }
-    }
-    
-    /**
-     * Shows edit assignment dialog
-     */
-    private void editAssignment(Assignment assignment) {
-        // This would normally open an editor dialog
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Edit Assignment");
-        alert.setHeaderText("Edit Assignment");
-        alert.setContentText("This would open an editor for: " + assignment.getAssignmentName());
-        alert.showAndWait();
     }
     
     /**
@@ -918,7 +931,6 @@ public class AssignmentsPage {
         @Override
         protected void updateItem(String item, boolean empty) {
             super.updateItem(item, empty);
-            
             if (empty || item == null) {
                 setText(null);
                 setGraphic(null);
@@ -927,17 +939,13 @@ public class AssignmentsPage {
                 if (data != null) {
                     HBox content = new HBox(10);
                     content.setAlignment(Pos.CENTER_LEFT);
-                    
                     Rectangle colorBox = new Rectangle(12, 12);
                     colorBox.setFill(Color.web(data.getColor()));
                     colorBox.setArcWidth(3);
                     colorBox.setArcHeight(3);
-                    
                     Label nameLabel = new Label(item);
                     nameLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 12));
-                    
                     content.getChildren().addAll(colorBox, nameLabel);
-                    
                     setText(null);
                     setGraphic(content);
                 } else {
@@ -958,10 +966,11 @@ public class AssignmentsPage {
         private final StringProperty points;
         private final StringProperty priority;
         private final String description;
-        
+        private final String content;
         private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM d, yyyy");
         
-        public Assignment(int id, String assignmentName, LocalDate dueDate, String status, String points, String priority, String description) {
+        public Assignment(int id, String assignmentName, LocalDate dueDate, String status, String points, 
+                         String priority, String description, String content) {
             this.id = id;
             this.assignmentName = new SimpleStringProperty(assignmentName);
             this.dueDate = dueDate;
@@ -970,6 +979,7 @@ public class AssignmentsPage {
             this.points = new SimpleStringProperty(points);
             this.priority = new SimpleStringProperty(priority);
             this.description = description != null ? description : "No description available.";
+            this.content = content;
         }
         
         private String formatDueDate(LocalDate date) {
@@ -990,7 +1000,6 @@ public class AssignmentsPage {
         public StringProperty statusProperty() { return status; }
         public StringProperty pointsProperty() { return points; }
         public StringProperty priorityProperty() { return priority; }
-        
         public String getAssignmentName() { return assignmentName.get(); }
         public LocalDate getDueDate() { return dueDate; }
         public String getFormattedDueDate() { return formattedDueDate.get(); }
@@ -998,7 +1007,7 @@ public class AssignmentsPage {
         public String getPoints() { return points.get(); }
         public String getPriority() { return priority.get(); }
         public String getDescription() { return description; }
-        
+        public String getContent() { return content; }
         public void setStatus(String newStatus) {
             status.set(newStatus);
         }

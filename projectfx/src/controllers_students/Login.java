@@ -110,10 +110,11 @@ public class Login extends Application {
                 return;
             }
             
-            String query = "SELECT * FROM users WHERE username = ? AND passwordHash = ?";
+            // Updated query to use 'password' instead of 'passwordHash'
+            String query = "SELECT * FROM users WHERE username = ? AND password = ?";
             PreparedStatement pstmt = conn.prepareStatement(query);
             pstmt.setString(1, username);
-            pstmt.setString(2, password); // Note: In a production app, you would hash the password
+            pstmt.setString(2, password); // Compare the plain password directly
             
             ResultSet rs = pstmt.executeQuery();
             
@@ -123,7 +124,7 @@ public class Login extends Application {
                     rs.getInt("userID"),
                     rs.getString("username"),
                     rs.getString("email"),
-                    rs.getString("passwordHash"),
+                    rs.getString("password"),
                     rs.getString("role")
                 );
                 
@@ -150,6 +151,7 @@ public class Login extends Application {
             e.printStackTrace();
         }
     }
+
 
     private void showAlert(Alert.AlertType type, String title, String message) {
         Alert alert = new Alert(type);

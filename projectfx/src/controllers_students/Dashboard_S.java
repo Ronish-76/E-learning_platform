@@ -139,8 +139,7 @@ public class Dashboard_S extends Application {
         Label helpTitle = new Label("HELP");
         helpTitle.getStyleClass().add("nav-section-title");
         helpTitle.setPadding(new Insets(20, 0, 10, 0));
-        
-        Button supportBtn = createSidebarButton("Support", "support_icon.png", () -> showSupportDialog());
+
         Button faqBtn = createSidebarButton("FAQ", "faq_icon.png", () -> loadContent(new FAQPage().getView()));
         
         Separator separator = new Separator();
@@ -161,7 +160,6 @@ public class Dashboard_S extends Application {
             assignmentsBtn, 
             quizBtn,
             helpTitle,
-            supportBtn,
             faqBtn,
             spacer,
             separator,
@@ -304,43 +302,7 @@ public class Dashboard_S extends Application {
         tt.play();
         content.setOpacity(1);
     }
-    
-    private void showSupportDialog() {
-        Dialog<String> dialog = new Dialog<>();
-        dialog.setTitle("Support Center");
-        dialog.setHeaderText("How can we help you?");
-        
-        // Create the support form
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20, 150, 10, 10));
-        
-        TextField name = new TextField();
-        name.setPromptText("Your name");
-        TextArea issue = new TextArea();
-        issue.setPromptText("Describe your issue");
-        
-        grid.add(new Label("Name:"), 0, 0);
-        grid.add(name, 1, 0);
-        grid.add(new Label("Issue:"), 0, 1);
-        grid.add(issue, 1, 1);
-        
-        dialog.getDialogPane().setContent(grid);
-        
-        ButtonType submitButtonType = new ButtonType("Submit", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(submitButtonType, ButtonType.CANCEL);
-        
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == submitButtonType) {
-                return name.getText();
-            }
-            return null;
-        });
-        
-        dialog.showAndWait();
-    }
-    
+
     private void showAlert(Alert.AlertType type, String title, String message) {
         Alert alert = new Alert(type);
         alert.setTitle(title);
