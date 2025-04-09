@@ -23,12 +23,11 @@ import controllers_Instructors.InstructorDashboard;
 import dao.DatabaseConnection;
 
 public class Login extends Application {
-    
-    // Create a User object to store the logged-in user information
+
     private static User loggedInUser = null;
 
     @Override
-    public void start(Stage primaryStage) { 
+    public void start(Stage primaryStage) {
         VBox leftPanel = new VBox(15);
         leftPanel.setPadding(new Insets(40));
         leftPanel.setAlignment(Pos.CENTER_LEFT);
@@ -59,7 +58,7 @@ public class Login extends Application {
         loginButton.setStyle("-fx-background-color: #000000; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         loginButton.setMinHeight(40);
         loginButton.setMaxWidth(Double.MAX_VALUE);
-        
+
         loginButton.setOnAction(e -> validateForm(emailField, passwordField, primaryStage));
 
         Separator separator = new Separator();
@@ -70,7 +69,12 @@ public class Login extends Application {
         signUpLink.setTextFill(Color.BLUE);
         signUpLink.setOnMouseClicked(e -> new Registration().start(primaryStage));
 
-        leftPanel.getChildren().addAll(logo, title, subtitle, emailLabel, emailField, passwordLabel, passwordField, loginButton, separator, signUpLink);
+        leftPanel.getChildren().addAll(
+                logo, title, subtitle,
+                emailLabel, emailField,
+                passwordLabel, passwordField,
+                loginButton, separator, signUpLink
+        );
 
         StackPane rightPanel = new StackPane();
         rightPanel.setStyle("-fx-background-color: #f9f9f9;");
@@ -89,7 +93,7 @@ public class Login extends Application {
         primaryStage.setWidth(1100);
         primaryStage.setHeight(700);
         primaryStage.centerOnScreen();
-        primaryStage.setResizable(false); // Disable resizing and remove the fullscreen button
+        primaryStage.setResizable(false);
         primaryStage.setTitle("Log In");
         primaryStage.show();
     }
@@ -97,61 +101,60 @@ public class Login extends Application {
     private void validateForm(TextField usernameField, PasswordField passwordField, Stage primaryStage) {
         String username = usernameField.getText().trim();
         String password = passwordField.getText().trim();
-        
+
         if (username.isEmpty() || password.isEmpty()) {
             showAlert(Alert.AlertType.ERROR, "Missing Information", "Please enter both username and password.");
             return;
         }
-        
-        // Authenticate user against database
+
         try (Connection conn = DatabaseConnection.getConnection()) {
             if (conn == null) {
                 showAlert(Alert.AlertType.ERROR, "Database Error", "Cannot connect to database. Please try again later.");
                 return;
             }
-            
-            // Updated query to use 'password' instead of 'passwordHash'
-            String query = "SELECT * FROM users WHERE username = ? AND password = ?";
+
+            String query = "SELECT * FROM users WHERE username = ?";
             PreparedStatement pstmt = conn.prepareStatement(query);
             pstmt.setString(1, username);
-            pstmt.setString(2, password); // Compare the plain password directly
-            
+
             ResultSet rs = pstmt.executeQuery();
-            
+
             if (rs.next()) {
-                // User found, create User object with data from database
-                loggedInUser = new User(
-                    rs.getInt("userID"),
-                    rs.getString("username"),
-                    rs.getString("email"),
-                    rs.getString("password"),
-                    rs.getString("role")
-                );
-                
-                // Show success message and wait for user to click OK
-                Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                alert.setTitle("Login Success");
-                alert.setHeaderText(null);
-                alert.setContentText("Welcome " + loggedInUser.getUsername() + "! You have successfully logged in as " + loggedInUser.getRole() + ".");
-                
-                // Wait for user to close the alert
-                alert.showAndWait();
-                
-                // Close login window and open dashboard
-                primaryStage.close();
-                launchDashboard();
+                String storedHash = rs.getString("passwordHash");
+
+                // Compare the password using BCrypt
+                if (org.mindrot.jbcrypt.BCrypt.checkpw(password, storedHash)) {
+                    loggedInUser = new User(
+                        rs.getInt("userID"),
+                        rs.getString("username"),
+                        rs.getString("email"),
+                        storedHash, // storing the hash here (optional)
+                        rs.getString("role")
+                    );
+
+                    Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                    alert.setTitle("Login Success");
+                    alert.setHeaderText(null);
+                    alert.setContentText("Welcome " + loggedInUser.getUsername() + "! You have successfully logged in as " + loggedInUser.getRole() + ".");
+                    alert.showAndWait();
+
+                    primaryStage.close();
+                    launchDashboard();
+                } else {
+                    showAlert(Alert.AlertType.ERROR, "Login Failed", "Invalid username or password. Please try again.");
+                    passwordField.clear();
+                }
+
             } else {
-                // User not found or password incorrect
                 showAlert(Alert.AlertType.ERROR, "Login Failed", "Invalid username or password. Please try again.");
-                passwordField.clear(); // Clear password field for security
+                passwordField.clear();
             }
-            
+
         } catch (SQLException e) {
             showAlert(Alert.AlertType.ERROR, "Database Error", "Error during login: " + e.getMessage());
             e.printStackTrace();
         }
     }
-
 
     private void showAlert(Alert.AlertType type, String title, String message) {
         Alert alert = new Alert(type);
@@ -163,44 +166,36 @@ public class Login extends Application {
 
     private void launchDashboard() {
         Stage dashboardStage = new Stage();
-        
+
         try {
-            // Check user role and launch the corresponding dashboard
             String userRole = loggedInUser.getRole();
-            
-            switch(userRole) {
+
+            switch (userRole) {
                 case "Student":
-                    // Launch Student Dashboard
                     Dashboard_S studentDashboard = new Dashboard_S();
                     studentDashboard.start(dashboardStage);
                     break;
-                    
+
                 case "Instructor":
-                    // Launch Instructor Dashboard
                     InstructorDashboard instructorDashboard = new InstructorDashboard();
                     instructorDashboard.start(dashboardStage);
                     break;
-                    
+
                 case "Admin":
-                    // Launch Admin Dashboard
                     AdminDashboard adminDashboard = new AdminDashboard();
                     adminDashboard.start(dashboardStage);
                     break;
-                    
+
                 default:
-                    // If role is not recognized, show error and reopen login
-                    showAlert(Alert.AlertType.ERROR, "Unknown Role", 
-                            "User role '" + userRole + "' is not recognized.");
+                    showAlert(Alert.AlertType.ERROR, "Unknown Role", "User role '" + userRole + "' is not recognized.");
                     new Login().start(new Stage());
             }
         } catch (Exception e) {
-            showAlert(Alert.AlertType.ERROR, "Error", 
-                    "Failed to open dashboard: " + e.getMessage());
+            showAlert(Alert.AlertType.ERROR, "Error", "Failed to open dashboard: " + e.getMessage());
             e.printStackTrace();
         }
     }
-    
-    // Getter for the logged-in user
+
     public static User getLoggedInUser() {
         return loggedInUser;
     }

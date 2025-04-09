@@ -168,26 +168,33 @@ public class Dashboard_S extends Application {
         
         return sidebar;
     }
-    
     private void showLogoutConfirmation(Stage primaryStage) {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Logout Confirmation");
-        alert.setHeaderText("Are you sure you want to exit?");
-        alert.setContentText("Click OK to exit the application or Cancel to stay.");
-        
+        alert.setHeaderText("Are you sure you want to log out?");
+        alert.setContentText("Click OK to log out or Cancel to stay.");
+
         // Add styling to the dialog
         DialogPane dialogPane = alert.getDialogPane();
         dialogPane.getStyleClass().add("logout-dialog");
-        
-        // Show the dialog and wait for response
+
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                // Close the application
-                Platform.exit();
+                try {
+                    // Load the Login page
+                    Login loginPage = new Login(); // Assuming Login.java has a start(Stage) method
+                    Stage loginStage = new Stage();
+                    loginPage.start(loginStage);
+
+                    // Close the current window
+                    primaryStage.close();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
         });
     }
-    
+
     private Button createSidebarButton(String text, String iconFileName, Runnable action) {
         Button button = new Button(text);
         button.getStyleClass().add("sidebar-button");

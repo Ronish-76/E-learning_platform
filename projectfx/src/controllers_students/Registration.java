@@ -1,4 +1,5 @@
 package controllers_students;
+
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -11,6 +12,8 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
+import org.mindrot.jbcrypt.BCrypt;  // Import bcrypt
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -128,6 +131,9 @@ public class Registration extends Application {
             return;
         }
         
+        // Hash the password using bcrypt
+        String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt());
+        
         // If all validation passes, insert user into database
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -154,12 +160,12 @@ public class Registration extends Application {
             if (rs != null) rs.close();
             if (pstmt != null) pstmt.close();
             
-            // Insert user into Users table (now using 'password' instead of 'passwordHash')
-            String insertUserSQL = "INSERT INTO Users (username, email, password, role) VALUES (?, ?, ?, ?)";
+            // Insert user into Users table
+            String insertUserSQL = "INSERT INTO Users (username, email, passwordHash, role) VALUES (?, ?, ?, ?)";
             pstmt = conn.prepareStatement(insertUserSQL, java.sql.Statement.RETURN_GENERATED_KEYS);
             pstmt.setString(1, username);
             pstmt.setString(2, email);
-            pstmt.setString(3, password); // Store password directly for now (we'll hash it later)
+            pstmt.setString(3, hashedPassword); // Store hashed password
             pstmt.setString(4, "Student");
             
             int rowsAffected = pstmt.executeUpdate();
@@ -208,7 +214,6 @@ public class Registration extends Application {
             }
         }
     }
-
     
     private void showAlert(Alert.AlertType type, String title, String message) {
         Alert alert = new Alert(type);
