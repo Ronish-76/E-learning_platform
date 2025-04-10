@@ -30,7 +30,6 @@ import dao.DatabaseConnection;
  * - Analyzing student performance on quizzes
  */
 public class QuizzesPage {
-
     // Models for quiz data
     public static class QuizQuestion {
         private final SimpleIntegerProperty id;
@@ -43,7 +42,7 @@ public class QuizzesPage {
         private final SimpleStringProperty correctOption;
 
         public QuizQuestion(int id, String subject, String question, String optionA,
-                           String optionB, String optionC, String optionD, String correctOption) {
+                String optionB, String optionC, String optionD, String correctOption) {
             this.id = new SimpleIntegerProperty(id);
             this.subject = new SimpleStringProperty(subject);
             this.question = new SimpleStringProperty(question);
@@ -53,7 +52,6 @@ public class QuizzesPage {
             this.optionD = new SimpleStringProperty(optionD);
             this.correctOption = new SimpleStringProperty(correctOption);
         }
-
         // Getters and property methods
         public int getId() { return id.get(); }
         public SimpleIntegerProperty idProperty() { return id; }
@@ -84,7 +82,7 @@ public class QuizzesPage {
         private final SimpleStringProperty questionText;
 
         public QuizResult(int resultId, int questionId, int studentId, String studentName,
-                         String selectedOption, boolean correct, String submissionDate, String questionText) {
+                String selectedOption, boolean correct, String submissionDate, String questionText) {
             this.resultId = new SimpleIntegerProperty(resultId);
             this.questionId = new SimpleIntegerProperty(questionId);
             this.studentId = new SimpleIntegerProperty(studentId);
@@ -94,7 +92,6 @@ public class QuizzesPage {
             this.submissionDate = new SimpleStringProperty(submissionDate);
             this.questionText = new SimpleStringProperty(questionText);
         }
-
         // Getters and property methods
         public int getResultId() { return resultId.get(); }
         public SimpleIntegerProperty resultIdProperty() { return resultId; }
@@ -123,7 +120,7 @@ public class QuizzesPage {
         private final double averageScore;
 
         public QuizStatistics(String subject, int totalQuestions, int totalAttempts,
-                             int totalCorrect, double averageScore) {
+                int totalCorrect, double averageScore) {
             this.subject = subject;
             this.totalQuestions = totalQuestions;
             this.totalAttempts = totalAttempts;
@@ -139,30 +136,24 @@ public class QuizzesPage {
     }
 
     private static class QuizForm extends VBox {
-        private final ComboBox<String> subjectField;
         private final TextArea questionField;
         private final TextField optionAField;
         private final TextField optionBField;
         private final TextField optionCField;
         private final TextField optionDField;
-        private final ComboBox<String> correctOptionField;
+        private final TextField correctOptionField; // Changed from ComboBox to TextField
+        private ComboBox<String> subjectField;  // Made non-final so it can be set externally
+
         public QuizForm(Set<String> subjects) {
             super(15);
             setPadding(new Insets(20));
-            setStyle("-fx-background-color: #446687; -fx-border-color: #446687; " +  // Set grey background here
+            setStyle("-fx-background-color: #446687; -fx-border-color: #446687; " +
                     "-fx-border-radius: 5; -fx-background-radius: 5;");
-            
             // Add drop shadow effect
             setEffect(new DropShadow(5, Color.rgb(0, 0, 0, 0.1)));
-            
-            // Subject field with styled label and description
-            Label subjectLabel = createFormLabel("Subject");
-            Label subjectDescription = createDescriptionLabel("Choose or enter a new subject for this question");
+
+            // Subject field is now managed externally
             subjectField = new ComboBox<>();
-            subjectField.setEditable(true);
-            subjectField.getItems().addAll(subjects);
-            subjectField.setPrefWidth(400);
-            styleControl(subjectField, "-fx-font-size: 14px;");
             
             // Question field with styled label and description
             Label questionLabel = createFormLabel("Question");
@@ -171,13 +162,13 @@ public class QuizzesPage {
             questionField.setPrefRowCount(3);
             questionField.setWrapText(true);
             styleControl(questionField, "-fx-font-size: 14px;");
-            
+
             // Options section with a colored container
             Label optionsLabel = createFormLabel("Options");
             Label optionsDescription = createDescriptionLabel("Add answer options for students to choose from");
             VBox optionsContainer = new VBox(10);
             optionsContainer.setPadding(new Insets(15));
-            optionsContainer.setStyle("-fx-background-color: #446687; -fx-background-radius: 5;");  // Set grey background for options
+            optionsContainer.setStyle("-fx-background-color: #446687; -fx-background-radius: 5;");
 
             // Option A - styled with description
             HBox optionABox = new HBox(10);
@@ -190,7 +181,7 @@ public class QuizzesPage {
             styleControl(optionAField, "-fx-font-size: 14px;");
             HBox.setHgrow(optionAField, Priority.ALWAYS);
             optionABox.getChildren().addAll(optionALabel, optionAField);
-            
+
             // Option B - styled
             HBox optionBBox = new HBox(10);
             optionBBox.setAlignment(Pos.CENTER_LEFT);
@@ -202,7 +193,7 @@ public class QuizzesPage {
             styleControl(optionBField, "-fx-font-size: 14px;");
             HBox.setHgrow(optionBField, Priority.ALWAYS);
             optionBBox.getChildren().addAll(optionBLabel, optionBField);
-            
+
             // Option C - styled
             HBox optionCBox = new HBox(10);
             optionCBox.setAlignment(Pos.CENTER_LEFT);
@@ -217,7 +208,7 @@ public class QuizzesPage {
             styleControl(optionCField, "-fx-font-size: 14px;");
             HBox.setHgrow(optionCField, Priority.ALWAYS);
             optionCBox.getChildren().addAll(optionCLabel, optionCField, optionCDescription);
-            
+
             // Option D - styled
             HBox optionDBox = new HBox(10);
             optionDBox.setAlignment(Pos.CENTER_LEFT);
@@ -232,38 +223,38 @@ public class QuizzesPage {
             styleControl(optionDField, "-fx-font-size: 14px;");
             HBox.setHgrow(optionDField, Priority.ALWAYS);
             optionDBox.getChildren().addAll(optionDLabel, optionDField, optionDDescription);
-            
+
             optionsContainer.getChildren().addAll(optionABox, optionBBox, optionCBox, optionDBox);
-            
-            // Correct option with styled label and description
+
+            // Correct option with styled label and description - CHANGED to TextField
             Label correctOptionLabel = createFormLabel("Correct Answer");
-            Label correctOptionDescription = createDescriptionLabel("Select which option is the correct answer");
-            correctOptionField = new ComboBox<>();
-            correctOptionField.getItems().addAll("A", "B", "C", "D");
-            correctOptionField.setValue("A");
-            correctOptionField.setPrefWidth(100);
+            Label correctOptionDescription = createDescriptionLabel("Enter the correct answer text");
+            correctOptionField = new TextField();
             styleControl(correctOptionField, "-fx-font-size: 14px;");
-            
+
             getChildren().addAll(
-                    subjectLabel, subjectDescription, subjectField,
                     questionLabel, questionDescription, questionField,
                     optionsLabel, optionsDescription, optionsContainer,
                     correctOptionLabel, correctOptionDescription, correctOptionField
             );
         }
 
+        public void setSubjectField(ComboBox<String> subjectField) {
+            this.subjectField = subjectField;
+        }
+
         private Label createFormLabel(String text) {
             Label label = new Label(text);
             label.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-            label.setTextFill(Color.BLACK);  // Ensuring text is black
+            label.setTextFill(Color.BLACK);
             label.setPadding(new Insets(5, 0, 0, 0));
             return label;
         }
-        
+
         private Label createDescriptionLabel(String text) {
             Label label = new Label(text);
             label.setFont(Font.font("Arial", FontWeight.NORMAL, 13));
-            label.setTextFill(Color.BLACK);  // Ensuring text is black
+            label.setTextFill(Color.BLACK);
             label.setPadding(new Insets(0, 0, 5, 0));
             return label;
         }
@@ -273,13 +264,14 @@ public class QuizzesPage {
                     "-fx-border-radius: 5; " + additionalStyle + "-fx-text-fill: black;");
         }
 
-        // Rest of the class remains the same...
         public boolean isValid() {
-            return subjectField.getValue() != null && !subjectField.getValue().trim().isEmpty() &&
-                    !questionField.getText().trim().isEmpty() &&
-                    !optionAField.getText().trim().isEmpty() &&
-                    !optionBField.getText().trim().isEmpty() &&
-                    correctOptionField.getValue() != null;
+            return subjectField != null && 
+                   subjectField.getValue() != null && 
+                   !subjectField.getValue().trim().isEmpty() &&
+                   !questionField.getText().trim().isEmpty() &&
+                   !optionAField.getText().trim().isEmpty() &&
+                   !optionBField.getText().trim().isEmpty() &&
+                   !correctOptionField.getText().trim().isEmpty(); // Check text not selection
         }
 
         public QuizQuestion createQuizQuestion() {
@@ -291,7 +283,7 @@ public class QuizzesPage {
                     optionBField.getText().trim(),
                     optionCField.getText().trim(),
                     optionDField.getText().trim(),
-                    correctOptionField.getValue()
+                    correctOptionField.getText().trim() // Store the actual answer text
             );
         }
 
@@ -301,7 +293,7 @@ public class QuizzesPage {
             optionBField.clear();
             optionCField.clear();
             optionDField.clear();
-            correctOptionField.setValue("A");
+            correctOptionField.clear(); // Clear the text field
         }
     }
 
@@ -351,23 +343,23 @@ public class QuizzesPage {
         } catch (SQLException e) {
             System.err.println("Database error: " + e.getMessage());
             e.printStackTrace();
-            
+
             // Show error message with better styling
             VBox errorContainer = new VBox(20);
             errorContainer.setAlignment(Pos.CENTER);
             errorContainer.setPadding(new Insets(40));
             errorContainer.setStyle("-fx-background-color: #fff5f5;");
-            
+
             Label errorTitle = new Label("Database Connection Error");
             errorTitle.setFont(Font.font("Arial", FontWeight.BOLD, 24));
             errorTitle.setTextFill(Color.BLACK);
-            
+
             Label errorLabel = new Label(e.getMessage());
             errorLabel.setFont(Font.font("Arial", 16));
             errorLabel.setTextFill(Color.BLACK);
             errorLabel.setWrapText(true);
             errorLabel.setTextAlignment(TextAlignment.CENTER);
-            
+
             errorContainer.getChildren().addAll(errorTitle, errorLabel);
             return errorContainer;
         }
@@ -381,19 +373,18 @@ public class QuizzesPage {
         topBar.setSpacing(20);
         topBar.setStyle("-fx-background-color: #48A969; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 5, 0, 0, 5);");
 
-     // Logo/Title
+        // Logo/Title
         Label titleLabel = new Label("Quiz Management System");
         titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 20));
-        titleLabel.setTextFill(Color.BLACK);  // Ensure the text is black
+        titleLabel.setTextFill(Color.BLACK);
         titleLabel.setStyle("-fx-text-fill: black; -fx-font-size: 20px; -fx-font-weight: bold;");
-
 
         // Navigation buttons
         Button overviewBtn = createNavButton("Dashboard");
         Button questionsBtn = createNavButton("Quiz Questions");
         Button resultsBtn = createNavButton("Quiz Results");
         Button createBtn = createNavButton("Create Quiz");
-        
+
         // Add actions to buttons
         overviewBtn.setOnAction(e -> showOverview());
         questionsBtn.setOnAction(e -> showQuizQuestions());
@@ -403,30 +394,33 @@ public class QuizzesPage {
         // Subject filter
         HBox filterBox = new HBox(10);
         filterBox.setAlignment(Pos.CENTER);
-        
         Label filterLabel = new Label("Filter by Subject:");
         filterLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 14));
         filterLabel.setTextFill(Color.BLACK);
-        
+
         subjectFilterComboBox = new ComboBox<>();
         subjectFilterComboBox.setStyle("-fx-background-color: white; -fx-prompt-text-fill: #666;");
         subjectFilterComboBox.setPrefWidth(200);
-        
+
         // Get unique subjects from database
         Set<String> subjects = new HashSet<>();
         subjects.add("All Subjects");
         for (QuizQuestion q : allQuestions) {
             subjects.add(q.getSubject());
         }
-        
         subjectFilterComboBox.getItems().addAll(subjects);
         subjectFilterComboBox.setValue("All Subjects");
-        
-        // Apply filter when selection changes
+
+        // Apply filter when selection changes - FIXED: added null checks
         subjectFilterComboBox.setOnAction(e -> {
             String selectedSubject = subjectFilterComboBox.getValue();
-            filterQuestionsBySubject(selectedSubject);
-            filterResultsBySubject(selectedSubject);
+            // Only filter if tables are initialized
+            if (questionsTable != null) {
+                filterQuestionsBySubject(selectedSubject);
+            }
+            if (resultsTable != null) {
+                filterResultsBySubject(selectedSubject);
+            }
         });
 
         // Add to filter box
@@ -435,7 +429,6 @@ public class QuizzesPage {
         // Add all to top bar with spacing
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        
         topBar.getChildren().addAll(titleLabel, overviewBtn, questionsBtn, resultsBtn, createBtn, spacer, filterBox);
     }
 
@@ -445,59 +438,58 @@ public class QuizzesPage {
         button.setFont(Font.font("Arial", FontWeight.NORMAL, 14));
         button.setTextFill(Color.BLACK);
         button.setStyle("-fx-background-color: transparent; -fx-padding: 5 10;");
-        
+
         // Add hover effect
         button.setOnMouseEntered(e -> 
             button.setStyle("-fx-background-color: #209447; -fx-padding: 5 10;")
         );
-        
         button.setOnMouseExited(e -> 
             button.setStyle("-fx-background-color: transparent; -fx-padding: 5 10;")
         );
-        
+
         return button;
     }
 
- // In the showOverview() method
+    // In the showOverview() method
     private void showOverview() {
         // Clear current content
         contentArea.getChildren().clear();
-        
+
         ScrollPane scrollPane = new ScrollPane();
         scrollPane.setFitToWidth(true);
         scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
-        
+
         VBox content = new VBox(15);
         content.setPadding(new Insets(0, 10, 20, 10));
-        
+
         Label header = new Label("Quiz Management Dashboard");
         header.setFont(Font.font("Arial", FontWeight.BOLD, 24));
         header.setTextFill(Color.BLACK); 
         header.setStyle("-fx-text-fill: black; -fx-font-size: 24px; -fx-font-weight: bold;");
         header.setPadding(new Insets(0, 0, 10, 0));
-        
+
         // Statistics section
         TitledPane statsPane = createStatisticsPane();
         statsPane.setText("Performance by Subject");
         statsPane.setExpanded(true);
         VBox.setMargin(statsPane, new Insets(10, 0, 10, 0));
-        
+
         VBox recentQuestionsSection = new VBox(10);
-        
+
         // Label for recent questions
         Label recentQuestionsLabel = new Label("Recent Quiz Questions");
         recentQuestionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
         recentQuestionsLabel.setTextFill(Color.BLACK);
         recentQuestionsLabel.setStyle("-fx-text-fill: black; -fx-font-size: 18px; -fx-font-weight: bold;");
-        
+
         // Important fix: Only add the label once
         recentQuestionsSection.getChildren().add(recentQuestionsLabel);
         recentQuestionsSection.setStyle("-fx-spacing: 10px;");
-        
+
         // Create a smaller table with limited rows
         TableView<QuizQuestion> recentQuestionsTable = createQuestionsTable();
         recentQuestionsTable.setMaxHeight(250);
-        
+
         // Only show the latest 5 questions
         ObservableList<QuizQuestion> recentQuestions = FXCollections.observableArrayList();
         int count = Math.min(5, allQuestions.size());
@@ -505,26 +497,23 @@ public class QuizzesPage {
             recentQuestions.add(allQuestions.get(i));
         }
         recentQuestionsTable.setItems(recentQuestions);
-        
+
         Button viewAllQuestionsBtn = new Button("View All Questions");
         viewAllQuestionsBtn.setStyle("-fx-background-color: #A7C4D7; -fx-text-fill: black;");
         viewAllQuestionsBtn.setOnAction(e -> showQuizQuestions());
-        
+
         HBox buttonBox = new HBox(viewAllQuestionsBtn);
         buttonBox.setAlignment(Pos.CENTER_RIGHT);
-        
-        // Important fix: Remove this line as it adds recentQuestionsLabel again
-        // recentQuestionsSection.getChildren().addAll(recentQuestionsLabel, recentQuestionsTable, buttonBox);
-        
-        // Instead, only add the table and button box:
+
+        // Add the table and button box
         recentQuestionsSection.getChildren().addAll(recentQuestionsTable, buttonBox);
-        
+
         // Add all components to the content
         content.getChildren().addAll(header, statsPane, recentQuestionsSection);
-        
         scrollPane.setContent(content);
         contentArea.getChildren().add(scrollPane);
     }
+
     // Show the quiz questions page
     private void showQuizQuestions() {
         // Clear current content
@@ -537,26 +526,26 @@ public class QuizzesPage {
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
         header.setSpacing(20);
-        
+
         Label title = new Label("Quiz Questions");
         title.setFont(Font.font("Arial", FontWeight.BOLD, 24));
-        title.setTextFill(Color.BLACK);  // Ensures text is black
+        title.setTextFill(Color.BLACK);
         title.setStyle("-fx-text-fill: black; -fx-font-size: 24px; -fx-font-weight: bold;");
 
         // Search section
         HBox searchBox = new HBox(10);
         searchBox.setAlignment(Pos.CENTER_RIGHT);
-        
+
         TextField searchField = new TextField();
         searchField.setPromptText("Search questions...");
         searchField.setPrefWidth(300);
         searchField.setStyle("-fx-background-color: white; -fx-border-color: #cccccc; " +
                 "-fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 8 15;");
-        
+
         Button searchButton = new Button("Search");
         searchButton.setStyle("-fx-background-color: #2563eb; -fx-text-fill: black; " +
                 "-fx-background-radius: 5; -fx-font-weight: bold; -fx-padding: 8 15;");
-        
+
         searchBox.getChildren().addAll(searchField, searchButton);
 
         // Add spacer to push search to right
@@ -567,7 +556,7 @@ public class QuizzesPage {
         // Create full questions table
         questionsTable = createQuestionsTable();
         VBox.setVgrow(questionsTable, Priority.ALWAYS);
-        
+
         // Apply current filter
         if (subjectFilterComboBox.getValue() != null) {
             filterQuestionsBySubject(subjectFilterComboBox.getValue());
@@ -587,7 +576,8 @@ public class QuizzesPage {
                     q.getOptionA().toLowerCase().contains(searchText) ||
                     q.getOptionB().toLowerCase().contains(searchText) ||
                     q.getOptionC().toLowerCase().contains(searchText) ||
-                    q.getOptionD().toLowerCase().contains(searchText)
+                    q.getOptionD().toLowerCase().contains(searchText) ||
+                    q.getCorrectOption().toLowerCase().contains(searchText)
                 );
                 questionsTable.setItems(searchResults);
             }
@@ -595,11 +585,11 @@ public class QuizzesPage {
 
         // Add all to content
         content.getChildren().addAll(header, questionsTable);
-        
+
         ScrollPane scrollPane = new ScrollPane(content);
         scrollPane.setFitToWidth(true);
         scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
-        
+
         contentArea.getChildren().add(scrollPane);
     }
 
@@ -613,43 +603,42 @@ public class QuizzesPage {
 
         Label title = new Label("Student Quiz Results");
         title.setFont(Font.font("Arial", FontWeight.BOLD, 24));
-        title.setTextFill(Color.BLACK);  // Ensures text is black
+        title.setTextFill(Color.BLACK);
         title.setStyle("-fx-text-fill: black; -fx-font-size: 24px; -fx-font-weight: bold;");
 
         // Create summary section
         HBox summaryBox = new HBox(20);
         summaryBox.setAlignment(Pos.CENTER_LEFT);
-        
+
         totalResultsLabel = createSummaryLabel("Total Results: " + allResults.size(), "#0e9f6e");
-	
-	     // Add correct/incorrect ratio
-	     int correctCount = 0;
-	     for (QuizResult result : allResults) {
-	         if (result.isCorrect()) {
-	             correctCount++;
-	         }
-	     }
-	
-	     int totalCount = allResults.size();
-	     double correctPercent = totalCount > 0 ? (double)correctCount / totalCount * 100 : 0;
-	
-	     Label correctRatioLabel = createSummaryLabel(
-	             String.format("Correct Answers: %d (%.1f%%)", correctCount, correctPercent), 
-	             correctPercent >= 70 ? "#0e9f6e" : "#e02424"
-	     );
-	
-	     // Inline style for correctRatioLabel
-	     correctRatioLabel.setStyle(
-	             String.format("-fx-text-fill: %s; -fx-font-size: 16px; -fx-font-weight: bold;", 
-	                           correctPercent >= 70 ? "#0e9f6e" : "#e02424")
-	     );
+
+        // Add correct/incorrect ratio
+        int correctCount = 0;
+        for (QuizResult result : allResults) {
+            if (result.isCorrect()) {
+                correctCount++;
+            }
+        }
+        int totalCount = allResults.size();
+        double correctPercent = totalCount > 0 ? (double)correctCount / totalCount * 100 : 0;
+
+        Label correctRatioLabel = createSummaryLabel(
+            String.format("Correct Answers: %d (%.1f%%)", correctCount, correctPercent), 
+            correctPercent >= 70 ? "#0e9f6e" : "#e02424"
+        );
+
+        // Inline style for correctRatioLabel
+        correctRatioLabel.setStyle(
+            String.format("-fx-text-fill: %s; -fx-font-size: 16px; -fx-font-weight: bold;", 
+            correctPercent >= 70 ? "#0e9f6e" : "#e02424")
+        );
 
         summaryBox.getChildren().addAll(totalResultsLabel, correctRatioLabel);
 
         // Create results table
         resultsTable = createResultsTable();
         VBox.setVgrow(resultsTable, Priority.ALWAYS);
-        
+
         // Apply current filter
         if (subjectFilterComboBox.getValue() != null) {
             filterResultsBySubject(subjectFilterComboBox.getValue());
@@ -659,61 +648,80 @@ public class QuizzesPage {
 
         // Add all to content
         content.getChildren().addAll(title, summaryBox, resultsTable);
-        
+
         ScrollPane scrollPane = new ScrollPane(content);
         scrollPane.setFitToWidth(true);
         scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
-        
+
         contentArea.getChildren().add(scrollPane);
     }
-    
+
     private void showCreateQuiz() {
         // Clear current content
         contentArea.getChildren().clear();
-
+        
         // Set the background color of the content area to grey
         contentArea.setStyle("-fx-background-color: #f9fafb;"); // Light background for the outer area
-
+        
         ScrollPane scrollPane = new ScrollPane();
         scrollPane.setFitToWidth(true);
         scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
-
+        
         VBox content = new VBox(15);
         content.setPadding(new Insets(0, 20, 20, 20));
         content.setAlignment(Pos.TOP_CENTER);
         content.setStyle("-fx-background-color: #d3d3d3;"); // Set grey background for the quiz creation area
-
+        
         // Title section with better styling
         Label titleLabel = new Label("Create New Quiz Questions");
         titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
-        titleLabel.setTextFill(Color.BLACK); // Change text color to black
+        titleLabel.setTextFill(Color.BLACK);
         titleLabel.setPadding(new Insets(0, 0, 5, 0));
         titleLabel.setStyle("-fx-font-family: Arial; -fx-font-weight: bold; -fx-font-size: 24px; -fx-text-fill: black; -fx-padding: 0 0 5 0;");
-
+        
         // Instructions label with enhanced styling
         Label instructionsLabel = new Label("Fill in the details for up to 5 quiz questions. At least the first form must be completed.");
         instructionsLabel.setFont(Font.font("Arial", 16));
-        instructionsLabel.setTextFill(Color.BLACK); // Change text color to black
+        instructionsLabel.setTextFill(Color.BLACK);
         instructionsLabel.setWrapText(true);
         instructionsLabel.setTextAlignment(TextAlignment.CENTER);
         instructionsLabel.setStyle("-fx-font-family: Arial; -fx-font-size: 16px; -fx-text-fill: black; -fx-wrap-text: true; -fx-text-alignment: center;");
-
-        VBox titleBox = new VBox(5);
-        titleBox.getChildren().addAll(titleLabel, instructionsLabel);
-
-        // Get existing subjects
+        
+        // Get existing subjects from database for the subject selector
         Set<String> subjects = new HashSet<>();
         for (QuizQuestion q : allQuestions) {
             subjects.add(q.getSubject());
         }
-
+        
+        // Create a subject selector at the top level
+        VBox subjectBox = new VBox(5);
+        Label subjectLabel = new Label("Select Subject for All Questions:");
+        subjectLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        subjectLabel.setTextFill(Color.BLACK);
+        
+        ComboBox<String> sharedSubjectField = new ComboBox<>();
+        sharedSubjectField.setEditable(true);
+        sharedSubjectField.getItems().addAll(subjects);
+        sharedSubjectField.setPrefWidth(400);
+        sharedSubjectField.setStyle("-fx-background-color: white; -fx-border-color: #cccccc; -fx-border-radius: 5; -fx-font-size: 14px; -fx-text-fill: black;");
+        
+        subjectBox.getChildren().addAll(subjectLabel, sharedSubjectField);
+        subjectBox.setStyle("-fx-background-color: #a9c4d4; -fx-padding: 10; -fx-background-radius: 5;");
+        
+        VBox titleBox = new VBox(10);
+        titleBox.getChildren().addAll(titleLabel, instructionsLabel, subjectBox);
+        titleBox.setPadding(new Insets(0, 0, 15, 0));
+        
         Accordion formsAccordion = new Accordion();
         formsAccordion.setPrefWidth(800);
-
+        
         List<QuizForm> quizForms = new ArrayList<>();
+        
         for (int i = 0; i < 5; i++) {
             QuizForm form = new QuizForm(subjects);
-
+            // Set the shared subject field for this form
+            form.setSubjectField(sharedSubjectField);
+            
             TitledPane formPane = new TitledPane();
             formPane.setText("Question " + (i + 1));
             formPane.setContent(form);
@@ -722,17 +730,17 @@ public class QuizzesPage {
                 "-fx-font-weight: bold; " +
                 "-fx-font-size: 14px; " +
                 "-fx-background-color: #ffffff; " +
-                "-fx-text-fill: black;" // Change text color to black
+                "-fx-text-fill: black;"
             );
-
+            
             formsAccordion.getPanes().add(formPane);
             quizForms.add(form);
-
+            
             if (i == 0) {
                 formsAccordion.setExpandedPane(formPane);
             }
         }
-
+        
         // Confirmation message container
         StackPane confirmationContainer = new StackPane();
         confirmationContainer.setVisible(false);
@@ -744,16 +752,16 @@ public class QuizzesPage {
             "-fx-padding: 15; " +
             "-fx-background-radius: 5;"
         );
-
+        
         Label confirmationLabel = new Label("Quiz questions saved successfully!");
         confirmationLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        confirmationLabel.setTextFill(Color.BLACK); // Change text color to black
+        confirmationLabel.setTextFill(Color.BLACK);
         confirmationContainer.getChildren().add(confirmationLabel);
-
+        
         HBox buttonBox = new HBox(20);
         buttonBox.setAlignment(Pos.CENTER);
         buttonBox.setPadding(new Insets(15, 0, 0, 0));
-
+        
         Button clearButton = new Button("Clear All");
         clearButton.setStyle(
             "-fx-background-color: #ef4444; " +
@@ -763,7 +771,7 @@ public class QuizzesPage {
             "-fx-padding: 10 20; " +
             "-fx-background-radius: 5;"
         );
-
+        
         Button saveButton = new Button("Save Quiz Questions");
         saveButton.setStyle(
             "-fx-background-color: #10b981; " +
@@ -773,61 +781,73 @@ public class QuizzesPage {
             "-fx-padding: 10 20; " +
             "-fx-background-radius: 5;"
         );
-
+        
         buttonBox.getChildren().addAll(clearButton, saveButton);
-
+        
         Label helpText = new Label("* Required fields must be completed");
         helpText.setFont(Font.font("Arial", FontWeight.NORMAL, 14));
-        helpText.setTextFill(Color.BLACK); // Change text color to black
+        helpText.setTextFill(Color.BLACK);
         helpText.setPadding(new Insets(5, 0, 0, 0));
-
+        
         // Button actions
         clearButton.setOnAction(e -> {
+            sharedSubjectField.setValue(null);
             for (QuizForm form : quizForms) {
                 form.clear();
             }
             confirmationContainer.setVisible(false);
         });
-
+        
         saveButton.setOnAction(e -> {
-            if (!quizForms.get(0).isValid()) {
+            // Check if the subject is selected
+            if (sharedSubjectField.getValue() == null || sharedSubjectField.getValue().trim().isEmpty()) {
                 showAlert(Alert.AlertType.ERROR,
-                        "Validation Error",
-                        "Please complete at least the first quiz form with all required fields.");
+                    "Validation Error",
+                    "Please select or enter a subject for the quiz questions.");
                 return;
             }
-
+            
+            // Check if at least the first form is completed
+            if (!quizForms.get(0).isValid()) {
+                showAlert(Alert.AlertType.ERROR,
+                    "Validation Error",
+                    "Please complete at least the first quiz form with all required fields.");
+                return;
+            }
+            
             List<QuizQuestion> newQuestions = new ArrayList<>();
             for (QuizForm form : quizForms) {
                 if (form.isValid()) {
                     newQuestions.add(form.createQuizQuestion());
                 }
             }
-
+            
             boolean success = saveQuizQuestions(newQuestions);
             if (success) {
                 confirmationContainer.setVisible(true);
                 for (QuizForm form : quizForms) {
                     form.clear();
                 }
-
                 try {
                     loadAllQuizData();
-                    filterQuestionsBySubject(subjectFilterComboBox.getValue());
-                    filterResultsBySubject(subjectFilterComboBox.getValue());
+                    if (questionsTable != null) {
+                        filterQuestionsBySubject(subjectFilterComboBox.getValue());
+                    }
+                    if (resultsTable != null) {
+                        filterResultsBySubject(subjectFilterComboBox.getValue());
+                    }
                 } catch (SQLException ex) {
                     showAlert(Alert.AlertType.ERROR,
-                            "Database Error",
-                            "Error reloading quiz data: " + ex.getMessage());
+                        "Database Error",
+                        "Error reloading quiz data: " + ex.getMessage());
                 }
             }
         });
-
+        
         content.getChildren().addAll(titleBox, formsAccordion, confirmationContainer, buttonBox, helpText);
         scrollPane.setContent(content);
         contentArea.getChildren().add(scrollPane);
     }
-
 
     // Create a styled summary label
     private Label createSummaryLabel(String text, String color) {
@@ -844,7 +864,7 @@ public class QuizzesPage {
         // Load unique subjects for filtering
         Set<String> subjects = new HashSet<>();
         subjects.add("All Subjects");
-
+        
         // Load quiz questions
         allQuestions = FXCollections.observableArrayList();
         String questionQuery = "SELECT * FROM quiz_questions ORDER BY subject, id";
@@ -852,50 +872,51 @@ public class QuizzesPage {
              ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
                 QuizQuestion question = new QuizQuestion(
-                        rs.getInt("id"),
-                        rs.getString("subject"),
-                        rs.getString("question"),
-                        rs.getString("option_a"),
-                        rs.getString("option_b"),
-                        rs.getString("option_c"),
-                        rs.getString("option_d"),
-                        rs.getString("correct_option")
+                    rs.getInt("id"),
+                    rs.getString("subject"),
+                    rs.getString("question"),
+                    rs.getString("option_a"),
+                    rs.getString("option_b"),
+                    rs.getString("option_c"),
+                    rs.getString("option_d"),
+                    rs.getString("correct_option")
                 );
                 allQuestions.add(question);
                 subjects.add(rs.getString("subject"));
             }
         }
-
+        
         // Load quiz results
         allResults = FXCollections.observableArrayList();
         String resultQuery =
-                "SELECT qr.resultID, qr.questionID, qr.studentID, u.username AS studentName, " +
-                "qr.selectedOption, qr.isCorrect, qr.submissionDate, qq.question " +
-                "FROM QuizResults qr " +
-                "JOIN quiz_questions qq ON qr.questionID = qq.id " +
-                "JOIN Students s ON qr.studentID = s.studentID " +
-                "JOIN Users u ON s.userID = u.userID " +
-                "ORDER BY qr.submissionDate DESC";
+            "SELECT qr.resultID, qr.questionID, qr.studentID, u.username AS studentName, " +
+            "qr.selectedOption, qr.isCorrect, qr.submissionDate, qq.question " +
+            "FROM QuizResults qr " +
+            "JOIN quiz_questions qq ON qr.questionID = qq.id " +
+            "JOIN Students s ON qr.studentID = s.studentID " +
+            "JOIN Users u ON s.userID = u.userID " +
+            "ORDER BY qr.submissionDate DESC";
         try (PreparedStatement stmt = dbConnection.prepareStatement(resultQuery);
              ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
                 Timestamp submissionTime = rs.getTimestamp("submissionDate");
                 String formattedDate = submissionTime != null ?
-                        new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(submissionTime) : "N/A";
+                    new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(submissionTime) : "N/A";
+                
                 QuizResult result = new QuizResult(
-                        rs.getInt("resultID"),
-                        rs.getInt("questionID"),
-                        rs.getInt("studentID"),
-                        rs.getString("studentName"),
-                        rs.getString("selectedOption"),
-                        rs.getBoolean("isCorrect"),
-                        formattedDate,
-                        rs.getString("question")
+                    rs.getInt("resultID"),
+                    rs.getInt("questionID"),
+                    rs.getInt("studentID"),
+                    rs.getString("studentName"),
+                    rs.getString("selectedOption"),
+                    rs.getBoolean("isCorrect"),
+                    formattedDate,
+                    rs.getString("question")
                 );
                 allResults.add(result);
             }
         }
-
+        
         // Load statistics by subject
         subjectStatistics = FXCollections.observableArrayList();
         for (String subject : subjects) {
@@ -923,14 +944,14 @@ public class QuizzesPage {
                 }
                 
                 double averageScore = totalAttempts > 0 ? 
-                        (double) totalCorrect / totalAttempts * 100.0 : 0.0;
+                    (double) totalCorrect / totalAttempts * 100.0 : 0.0;
                 
                 subjectStatistics.add(new QuizStatistics(
-                        subject, totalQuestions, totalAttempts, totalCorrect, averageScore
+                    subject, totalQuestions, totalAttempts, totalCorrect, averageScore
                 ));
             }
         }
-
+        
         // Update subject filter dropdown
         if (subjectFilterComboBox != null) {
             subjectFilterComboBox.getItems().setAll(subjects);
@@ -945,23 +966,23 @@ public class QuizzesPage {
         TableView<QuizQuestion> table = new TableView<>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setStyle(
-                "-fx-background-color: white; " +
-                "-fx-table-cell-border-color: #e5e5e5; " +
-                "-fx-table-header-border-color: #e5e5e5; " +
-                "-fx-border-color: #e5e5e5;"
+            "-fx-background-color: white; " +
+            "-fx-table-cell-border-color: #e5e5e5; " +
+            "-fx-table-header-border-color: #e5e5e5; " +
+            "-fx-border-color: #e5e5e5;"
         );
-
+        
         // ID column
         TableColumn<QuizQuestion, Number> idColumn = new TableColumn<>("ID");
         idColumn.setCellValueFactory(new PropertyValueFactory<>("id"));
         idColumn.setPrefWidth(50);
         idColumn.setStyle("-fx-alignment: CENTER; -fx-font-weight: bold;");
-
+        
         // Subject column
         TableColumn<QuizQuestion, String> subjectColumn = new TableColumn<>("Subject");
         subjectColumn.setCellValueFactory(new PropertyValueFactory<>("subject"));
         subjectColumn.setPrefWidth(150);
-
+        
         // Question column
         TableColumn<QuizQuestion, String> questionColumn = new TableColumn<>("Question");
         questionColumn.setCellValueFactory(new PropertyValueFactory<>("question"));
@@ -978,44 +999,44 @@ public class QuizzesPage {
             text.setFill(Color.BLACK);
             return cell;
         });
-
+        
         // Options columns group
         TableColumn<QuizQuestion, String> optionsGroup = new TableColumn<>("Options");
         optionsGroup.setStyle("-fx-alignment: CENTER;");
-
+        
         // Option A with colored cell
         TableColumn<QuizQuestion, String> optionAColumn = new TableColumn<>("A");
         optionAColumn.setCellValueFactory(new PropertyValueFactory<>("optionA"));
         optionAColumn.setPrefWidth(120);
         optionAColumn.setCellFactory(col -> createColoredOptionCell("#2563eb"));
-
+        
         // Option B with colored cell
         TableColumn<QuizQuestion, String> optionBColumn = new TableColumn<>("B");
         optionBColumn.setCellValueFactory(new PropertyValueFactory<>("optionB"));
         optionBColumn.setPrefWidth(120);
         optionBColumn.setCellFactory(col -> createColoredOptionCell("#0e9f6e"));
-
+        
         // Option C with colored cell
         TableColumn<QuizQuestion, String> optionCColumn = new TableColumn<>("C");
         optionCColumn.setCellValueFactory(new PropertyValueFactory<>("optionC"));
         optionCColumn.setPrefWidth(120);
         optionCColumn.setCellFactory(col -> createColoredOptionCell("#9f1239"));
-
+        
         // Option D with colored cell
         TableColumn<QuizQuestion, String> optionDColumn = new TableColumn<>("D");
         optionDColumn.setCellValueFactory(new PropertyValueFactory<>("optionD"));
         optionDColumn.setPrefWidth(120);
         optionDColumn.setCellFactory(col -> createColoredOptionCell("#7e3af2"));
-
+        
         optionsGroup.getColumns().addAll(optionAColumn, optionBColumn, optionCColumn, optionDColumn);
-
-        // Correct option column with highlighting
-        TableColumn<QuizQuestion, String> correctColumn = new TableColumn<>("Correct");
+        
+        // Correct option column with highlighting - UPDATED to show full answer
+        TableColumn<QuizQuestion, String> correctColumn = new TableColumn<>("Correct Answer");
         correctColumn.setCellValueFactory(new PropertyValueFactory<>("correctOption"));
-        correctColumn.setPrefWidth(80);
+        correctColumn.setPrefWidth(150); // Make it wider to fit the answer text
         correctColumn.setStyle("-fx-alignment: CENTER;");
         
-        // Style the correct answer cell
+        // Style the correct answer cell - simplified to just show text
         correctColumn.setCellFactory(column -> new TableCell<QuizQuestion, String>() {
             @Override
             protected void updateItem(String item, boolean empty) {
@@ -1028,27 +1049,17 @@ public class QuizzesPage {
                     setText(item);
                     setTextFill(Color.BLACK);
                     setFont(Font.font("Arial", FontWeight.BOLD, 14));
-                    
-                    // Different background color based on the correct option
-                    if ("A".equals(item)) {
-                        setStyle("-fx-background-color: #dbeafe; -fx-alignment: center;");
-                    } else if ("B".equals(item)) {
-                        setStyle("-fx-background-color: #d1fae5; -fx-alignment: center;");
-                    } else if ("C".equals(item)) {
-                        setStyle("-fx-background-color: #fee2e2; -fx-alignment: center;");
-                    } else if ("D".equals(item)) {
-                        setStyle("-fx-background-color: #ede9fe; -fx-alignment: center;");
-                    }
+                    setStyle("-fx-background-color: #d1fae5; -fx-alignment: center;"); // Green background
                 }
             }
         });
-
+        
         // Add columns to table
         table.getColumns().addAll(idColumn, subjectColumn, questionColumn, optionsGroup, correctColumn);
-
+        
         // Set data
         table.setItems(allQuestions);
-
+        
         // Make it possible to detect row double-click with visual feedback
         table.setRowFactory(tv -> {
             TableRow<QuizQuestion> row = new TableRow<>();
@@ -1075,7 +1086,7 @@ public class QuizzesPage {
             
             return row;
         });
-
+        
         return table;
     }
 
@@ -1104,12 +1115,12 @@ public class QuizzesPage {
         TableView<QuizResult> table = new TableView<>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setStyle(
-                "-fx-background-color: white; " +
-                "-fx-table-cell-border-color: #e5e5e5; " +
-                "-fx-table-header-border-color: #e5e5e5; " +
-                "-fx-border-color: #e5e5e5;"
+            "-fx-background-color: white; " +
+            "-fx-table-cell-border-color: #e5e5e5; " +
+            "-fx-table-header-border-color: #e5e5e5; " +
+            "-fx-border-color: #e5e5e5;"
         );
-
+        
         // Question column with wrapping text
         TableColumn<QuizResult, String> questionColumn = new TableColumn<>("Question");
         questionColumn.setCellValueFactory(new PropertyValueFactory<>("questionText"));
@@ -1126,7 +1137,7 @@ public class QuizzesPage {
             text.setFill(Color.BLACK);
             return cell;
         });
-
+        
         // Student column with icon
         TableColumn<QuizResult, String> studentColumn = new TableColumn<>("Student");
         studentColumn.setCellValueFactory(new PropertyValueFactory<>("studentName"));
@@ -1159,14 +1170,14 @@ public class QuizzesPage {
                 }
             }
         });
-
-        // Selected option column with colored background
-        TableColumn<QuizResult, String> selectedColumn = new TableColumn<>("Selected");
+        
+        // Selected option column (now showing the full answer text)
+        TableColumn<QuizResult, String> selectedColumn = new TableColumn<>("Selected Answer");
         selectedColumn.setCellValueFactory(new PropertyValueFactory<>("selectedOption"));
-        selectedColumn.setPrefWidth(80);
+        selectedColumn.setPrefWidth(150); // Wider for answer text
         selectedColumn.setStyle("-fx-alignment: CENTER;");
         
-        // Style selected option with colors matching the options
+        // Style selected option cells
         selectedColumn.setCellFactory(column -> new TableCell<QuizResult, String>() {
             @Override
             protected void updateItem(String item, boolean empty) {
@@ -1178,22 +1189,12 @@ public class QuizzesPage {
                 } else {
                     setText(item);
                     setTextFill(Color.BLACK);
-                    setFont(Font.font("Arial", FontWeight.BOLD, 14));
-                    
-                    // Color based on selected option
-                    if ("A".equals(item)) {
-                        setStyle("-fx-background-color: #dbeafe; -fx-alignment: center;");
-                    } else if ("B".equals(item)) {
-                        setStyle("-fx-background-color: #d1fae5; -fx-alignment: center;");
-                    } else if ("C".equals(item)) {
-                        setStyle("-fx-background-color: #fee2e2; -fx-alignment: center;");
-                    } else if ("D".equals(item)) {
-                        setStyle("-fx-background-color: #ede9fe; -fx-alignment: center;");
-                    }
+                    setFont(Font.font("Arial", 14));
+                    setStyle("-fx-background-color: #f0f9ff; -fx-alignment: center;"); // Light blue background
                 }
             }
         });
-
+        
         // Correct column with check/X mark
         TableColumn<QuizResult, Boolean> correctColumn = new TableColumn<>("Correct");
         correctColumn.setCellValueFactory(new PropertyValueFactory<>("correct"));
@@ -1229,7 +1230,7 @@ public class QuizzesPage {
                 return pane;
             }
         });
-
+        
         // Date column with formatted date
         TableColumn<QuizResult, String> dateColumn = new TableColumn<>("Submission Date");
         dateColumn.setCellValueFactory(new PropertyValueFactory<>("submissionDate"));
@@ -1250,12 +1251,13 @@ public class QuizzesPage {
                 }
             }
         });
-
+        
         // Add columns to table
         table.getColumns().addAll(questionColumn, studentColumn, selectedColumn, correctColumn, dateColumn);
-
+        
         // Set data
         table.setItems(allResults);
+        
         return table;
     }
 
@@ -1268,16 +1270,16 @@ public class QuizzesPage {
         pane.setCollapsible(true);
         pane.setExpanded(true);
         pane.setStyle("-fx-background-color: white;");
-
+        
         // Create table for statistics
         TableView<QuizStatistics> statsTable = new TableView<>();
         statsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         statsTable.setStyle(
-                "-fx-background-color: white; " +
-                "-fx-table-cell-border-color: #e5e5e5; " +
-                "-fx-table-header-border-color: #e5e5e5;"
+            "-fx-background-color: white; " +
+            "-fx-table-cell-border-color: #e5e5e5; " +
+            "-fx-table-header-border-color: #e5e5e5;"
         );
-
+        
         // Subject column
         TableColumn<QuizStatistics, String> subjectColumn = new TableColumn<>("Subject");
         subjectColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getSubject()));
@@ -1299,29 +1301,29 @@ public class QuizzesPage {
                 }
             }
         });
-
+        
         // Questions count column
         TableColumn<QuizStatistics, Number> questionsColumn = new TableColumn<>("Total Questions");
         questionsColumn.setCellValueFactory(cellData -> new SimpleIntegerProperty(cellData.getValue().getTotalQuestions()));
         questionsColumn.setPrefWidth(120);
         questionsColumn.setStyle("-fx-alignment: CENTER;");
-
+        
         // Total attempts column
         TableColumn<QuizStatistics, Number> attemptsColumn = new TableColumn<>("Total Attempts");
         attemptsColumn.setCellValueFactory(cellData -> new SimpleIntegerProperty(cellData.getValue().getTotalAttempts()));
         attemptsColumn.setPrefWidth(120);
         attemptsColumn.setStyle("-fx-alignment: CENTER;");
-
+        
         // Correct answers column
         TableColumn<QuizStatistics, Number> correctColumn = new TableColumn<>("Correct Answers");
         correctColumn.setCellValueFactory(cellData -> new SimpleIntegerProperty(cellData.getValue().getTotalCorrect()));
         correctColumn.setPrefWidth(120);
         correctColumn.setStyle("-fx-alignment: CENTER;");
-
+        
         // Average score column with percentage formatting
         TableColumn<QuizStatistics, String> avgScoreColumn = new TableColumn<>("Average Score");
         avgScoreColumn.setCellValueFactory(cellData ->
-                new SimpleStringProperty(String.format("%.1f%%", cellData.getValue().getAverageScore())));
+            new SimpleStringProperty(String.format("%.1f%%", cellData.getValue().getAverageScore())));
         avgScoreColumn.setPrefWidth(120);
         avgScoreColumn.setStyle("-fx-alignment: CENTER;");
         
@@ -1341,7 +1343,7 @@ public class QuizzesPage {
                 }
             }
         });
-
+        
         // Progress column with stylized progress bar
         TableColumn<QuizStatistics, Void> progressColumn = new TableColumn<>("Completion");
         progressColumn.setCellFactory(col -> new TableCell<QuizStatistics, Void>() {
@@ -1376,30 +1378,33 @@ public class QuizzesPage {
                     } else {
                         progressBar.setStyle("-fx-accent: #0e9f6e;"); // Green
                     }
+                    
                     setGraphic(container);
                 }
             }
         });
-
+        
         // Add columns to table
         statsTable.getColumns().addAll(
-                subjectColumn, questionsColumn, attemptsColumn,
-                correctColumn, avgScoreColumn, progressColumn
+            subjectColumn, questionsColumn, attemptsColumn,
+            correctColumn, avgScoreColumn, progressColumn
         );
-
+        
         // Set data
         statsTable.setItems(subjectStatistics);
         pane.setContent(statsTable);
         return pane;
     }
 
-    // Filter questions by subject
+    // Filter questions by subject - FIXED: added null check
     private void filterQuestionsBySubject(String subject) {
+        if (questionsTable == null) return; // Add null check
+        
         if ("All Subjects".equals(subject)) {
             questionsTable.setItems(allQuestions);
         } else {
             ObservableList<QuizQuestion> filtered = allQuestions.filtered(
-                    q -> subject.equals(q.getSubject())
+                q -> subject.equals(q.getSubject())
             );
             questionsTable.setItems(filtered);
         }
@@ -1409,16 +1414,18 @@ public class QuizzesPage {
         }
     }
 
-    // Filter results by subject
+    // Filter results by subject - FIXED: added null check
     private void filterResultsBySubject(String subject) {
+        if (resultsTable == null) return; // Add null check
+        
         if ("All Subjects".equals(subject)) {
             resultsTable.setItems(allResults);
         } else {
             ObservableList<QuizResult> filtered = allResults.filtered(
-                    r -> {
-                        QuizQuestion question = findQuestionById(r.getQuestionId());
-                        return question != null && subject.equals(question.getSubject());
-                    }
+                r -> {
+                    QuizQuestion question = findQuestionById(r.getQuestionId());
+                    return question != null && subject.equals(question.getSubject());
+                }
             );
             resultsTable.setItems(filtered);
         }
@@ -1447,8 +1454,9 @@ public class QuizzesPage {
         try {
             // Prepare statement for inserting questions
             String insertQuery =
-                    "INSERT INTO quiz_questions (subject, question, option_a, option_b, option_c, option_d, correct_option) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)";
+                "INSERT INTO quiz_questions (subject, question, option_a, option_b, option_c, option_d, correct_option) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?)";
+            
             try (PreparedStatement stmt = dbConnection.prepareStatement(insertQuery)) {
                 // Start transaction
                 dbConnection.setAutoCommit(false);
@@ -1489,7 +1497,6 @@ public class QuizzesPage {
                         return false;
                     }
                 }
-                
                 return true;
             }
         } catch (SQLException e) {
@@ -1502,9 +1509,8 @@ public class QuizzesPage {
             }
             
             showAlert(Alert.AlertType.ERROR,
-                    "Database Error",
-                    "Error saving quiz questions: " + e.getMessage());
-            
+                "Database Error",
+                "Error saving quiz questions: " + e.getMessage());
             return false;
         }
     }
@@ -1555,15 +1561,16 @@ public class QuizzesPage {
         questionDetails.setHgap(15);
         questionDetails.setStyle("-fx-background-color: #f8f9fa; -fx-padding: 20; -fx-background-radius: 5;");
         
-        // Create answer option boxes with styling
+        // Create answer option boxes with styling - UPDATED to compare with correct answer text
+        String correctAnswer = question.getCorrectOption();
         HBox optionABox = createOptionBox("A", question.getOptionA(), "#dbeafe", 
-                question.getCorrectOption().equals("A"));
+            correctAnswer.equals(question.getOptionA()));
         HBox optionBBox = createOptionBox("B", question.getOptionB(), "#d1fae5", 
-                question.getCorrectOption().equals("B"));
+            correctAnswer.equals(question.getOptionB()));
         HBox optionCBox = createOptionBox("C", question.getOptionC(), "#fee2e2", 
-                question.getCorrectOption().equals("C"));
+            correctAnswer.equals(question.getOptionC()));
         HBox optionDBox = createOptionBox("D", question.getOptionD(), "#ede9fe", 
-                question.getCorrectOption().equals("D"));
+            correctAnswer.equals(question.getOptionD()));
         
         // Add options to grid, 2 per row
         questionDetails.add(optionABox, 0, 0);
@@ -1581,7 +1588,7 @@ public class QuizzesPage {
         // Results statistics card
         VBox statsBox = new VBox(10);
         statsBox.setStyle("-fx-background-color: white; -fx-padding: 15; " +
-                "-fx-border-color: #e0e0e0; -fx-border-radius: 5;");
+            "-fx-border-color: #e0e0e0; -fx-border-radius: 5;");
         
         // Calculate statistics
         int totalAnswers = questionResults.size();
@@ -1591,9 +1598,8 @@ public class QuizzesPage {
                 correctAnswers++;
             }
         }
-        
         double correctPercentage = totalAnswers > 0 ?
-                (double) correctAnswers / totalAnswers * 100 : 0;
+            (double) correctAnswers / totalAnswers * 100 : 0;
         
         // Create statistics labels
         Label summaryTitle = new Label("Performance Summary");
@@ -1649,10 +1655,10 @@ public class QuizzesPage {
         studentColumn.setCellValueFactory(new PropertyValueFactory<>("studentName"));
         studentColumn.setPrefWidth(150);
         
-        // Selected option column with colors
-        TableColumn<QuizResult, String> selectedColumn = new TableColumn<>("Selected");
+        // Selected option column with full answer text
+        TableColumn<QuizResult, String> selectedColumn = new TableColumn<>("Selected Answer");
         selectedColumn.setCellValueFactory(new PropertyValueFactory<>("selectedOption"));
-        selectedColumn.setPrefWidth(80);
+        selectedColumn.setPrefWidth(150); // Wider for answer text
         
         // Style the selected option cells with colors
         selectedColumn.setCellFactory(column -> new TableCell<QuizResult, String>() {
@@ -1666,18 +1672,14 @@ public class QuizzesPage {
                 } else {
                     setText(item);
                     setTextFill(Color.BLACK);
-                    setFont(Font.font("Arial", FontWeight.BOLD, 14));
+                    setFont(Font.font("Arial", 14));
                     setAlignment(Pos.CENTER);
                     
-                    // Color based on selected option
-                    if ("A".equals(item)) {
-                        setStyle("-fx-background-color: #dbeafe;");
-                    } else if ("B".equals(item)) {
-                        setStyle("-fx-background-color: #d1fae5;");
-                    } else if ("C".equals(item)) {
-                        setStyle("-fx-background-color: #fee2e2;");
-                    } else if ("D".equals(item)) {
-                        setStyle("-fx-background-color: #ede9fe;");
+                    // Highlight if selected option is correct
+                    if (item.equals(correctAnswer)) {
+                        setStyle("-fx-background-color: #d1fae5;"); // Green for correct
+                    } else {
+                        setStyle("-fx-background-color: #fee2e2;"); // Red for incorrect
                     }
                 }
             }
@@ -1720,16 +1722,15 @@ public class QuizzesPage {
         
         // Add columns to table
         resultsTable.getColumns().addAll(studentColumn, selectedColumn, correctColumn, dateColumn);
-        
         VBox.setVgrow(resultsTable, Priority.ALWAYS);
         
         // Add all components to content
         content.getChildren().addAll(
-                headerBox,
-                questionDetails,
-                statsBox,
-                new Label("Student Responses"),
-                resultsTable
+            headerBox,
+            questionDetails,
+            statsBox,
+            new Label("Student Responses"),
+            resultsTable
         );
         
         // Set dialog content
@@ -1739,11 +1740,11 @@ public class QuizzesPage {
         dialogPane.getButtonTypes().add(ButtonType.CLOSE);
         Button closeButton = (Button) dialogPane.lookupButton(ButtonType.CLOSE);
         closeButton.setStyle(
-                "-fx-background-color: #2563eb; " +
-                "-fx-text-fill: black; " +
-                "-fx-font-weight: bold; " +
-                "-fx-padding: 8 15; " +
-                "-fx-background-radius: 5;"
+            "-fx-background-color: #2563eb; " +
+            "-fx-text-fill: black; " +
+            "-fx-font-weight: bold; " +
+            "-fx-padding: 8 15; " +
+            "-fx-background-radius: 5;"
         );
         
         dialog.showAndWait();
@@ -1754,8 +1755,8 @@ public class QuizzesPage {
         HBox box = new HBox(15);
         box.setPadding(new Insets(10));
         box.setStyle("-fx-border-color: #cccccc; -fx-border-width: 1; " +
-                "-fx-border-radius: 5; -fx-background-radius: 5; " +
-                (isCorrect ? "-fx-background-color: " + color + ";" : ""));
+            "-fx-border-radius: 5; -fx-background-radius: 5; " +
+            (isCorrect ? "-fx-background-color: " + color + ";" : ""));
         
         // Option letter label
         Label letterLabel = new Label(optionLetter);
@@ -1798,7 +1799,6 @@ public class QuizzesPage {
         
         // Set background color based on alert type
         String bgColor = "#ffffff";
-        
         if (type == Alert.AlertType.ERROR) {
             bgColor = "#fee2e2";
         } else if (type == Alert.AlertType.WARNING) {
@@ -1810,9 +1810,9 @@ public class QuizzesPage {
         }
         
         dialogPane.setStyle(
-                "-fx-background-color: " + bgColor + "; " +
-                "-fx-border-color: #cccccc; " +
-                "-fx-border-width: 1px;"
+            "-fx-background-color: " + bgColor + "; " +
+            "-fx-border-color: #cccccc; " +
+            "-fx-border-width: 1px;"
         );
         
         // Find and style any labels to ensure text visibility
@@ -1826,27 +1826,26 @@ public class QuizzesPage {
         // Style the buttons
         for (ButtonType buttonType : alert.getDialogPane().getButtonTypes()) {
             Button button = (Button) alert.getDialogPane().lookupButton(buttonType);
-            
             if (buttonType == ButtonType.OK || buttonType == ButtonType.YES) {
                 button.setStyle(
-                        "-fx-background-color: #2563eb; " +
-                        "-fx-text-fill: black; " +
-                        "-fx-font-weight: bold; " +
-                        "-fx-background-radius: 5;"
+                    "-fx-background-color: #2563eb; " +
+                    "-fx-text-fill: black; " +
+                    "-fx-font-weight: bold; " +
+                    "-fx-background-radius: 5;"
                 );
             } else if (buttonType == ButtonType.CANCEL || buttonType == ButtonType.NO) {
                 button.setStyle(
-                        "-fx-background-color: #e02424; " +
-                        "-fx-text-fill: black; " +
-                        "-fx-font-weight: bold; " +
-                        "-fx-background-radius: 5;"
+                    "-fx-background-color: #e02424; " +
+                    "-fx-text-fill: black; " +
+                    "-fx-font-weight: bold; " +
+                    "-fx-background-radius: 5;"
                 );
             } else {
                 button.setStyle(
-                        "-fx-background-color: #6b7280; " +
-                        "-fx-text-fill: black; " +
-                        "-fx-font-weight: bold; " +
-                        "-fx-background-radius: 5;"
+                    "-fx-background-color: #6b7280; " +
+                    "-fx-text-fill: black; " +
+                    "-fx-font-weight: bold; " +
+                    "-fx-background-radius: 5;"
                 );
             }
         }
