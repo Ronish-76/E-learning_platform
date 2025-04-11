@@ -126,7 +126,7 @@ public class Login extends Application {
                 if (org.mindrot.jbcrypt.BCrypt.checkpw(password, storedHash)) {
                     loggedInUser = new User(
                         rs.getInt("userID"),
-                        rs.getString("username"),
+                        rs.getString("username"),  
                         rs.getString("email"),
                         storedHash, // storing the hash here (optional)
                         rs.getString("role")
